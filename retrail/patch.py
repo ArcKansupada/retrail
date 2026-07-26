@@ -1,0 +1,175 @@
+"""The fork `edit` API - structured patch native, callback as escape hatch.
+
+A patch is data, so it can be stored on the fork's session row. That's what
+lets `retrail log` show not just WHERE you forked (the parent SHA) but WHAT you
+changed - otherwise two forks from the same step with opposite edits are
+indistinguishable. It's also the only shape the CLI can accept, since
+`--edit-file edit.json` cannot hold a lambda.
+
+A callback is accepted from Python for edits that depend on the step's existing
+content (double a price, truncate a document) and for bisect, which generates
+edits programmatically. Callback forks record that a callback ran but cannot
+round-trip from the record alone - that limitation is real and stated, not
+papered over.
+
+Patch paths are JSON Pointers rooted at the step, so `/output/0/content`
+addresses the first tool result's content.
+"""
+
+import copy
+
+from .errors import RetrailError
+
+_MISSING = object()
+
+
+class PatchError(RetrailError):
+    pass
+
+
+def parse_pointer(pointer):
+    if pointer in ("", "/"):
+        return []
+    if not pointer.startswith("/"):
+        raise PatchError(
+            f"path {pointer!r} must be a JSON Pointer starting with '/' "
+            "(e.g. /output/0/content)"
+        )
+    return [p.replace("~1", "/").replace("~0", "~") for p in pointer.split("/")[1:]]
+
+
+def _descend(doc, tokens, pointer):
+    """Walk to the container holding the final token."""
+    node = doc
+    for i, token in enumerate(tokens[:-1]):
+        node = _child(node, token, "/".join(tokens[: i + 1]), pointer)
+    return node
+
+
+def _child(node, token, so_far, pointer):
+    if isinstance(node, list):
+        index = _as_index(token, pointer)
+        if index >= len(node):
+            raise PatchError(
+                f"path {pointer!r}: index {index} is out of range at /{so_far} "
+                f"(length {len(node)})"
+            )
+        return node[index]
+    if isinstance(node, dict):
+        if token not in node:
+            raise PatchError(
+                f"path {pointer!r}: no key {token!r} at /{so_far}. "
+                f"Available: {sorted(node)}"
+            )
+        return node[token]
+    raise PatchError(
+        f"path {pointer!r}: cannot descend into {type(node).__name__} at /{so_far}"
+    )
+
+
+def _as_index(token, pointer):
+    try:
+        return int(token)
+    except ValueError:
+        raise PatchError(
+            f"path {pointer!r}: {token!r} is not a valid list index"
+        ) from None
+
+
+def apply_patch(doc, patch):
+    """Apply one op or a list of ops. Returns a new document; never mutates."""
+    ops = [patch] if isinstance(patch, dict) else list(patch)
+    result = copy.deepcopy(doc)
+    for op in ops:
+        result = _apply_one(result, op)
+    return result
+
+
+def _apply_one(doc, op):
+    if not isinstance(op, dict):
+        raise PatchError(f"each patch op must be an object, got {type(op).__name__}")
+    kind = op.get("op")
+    if kind not in ("replace", "add", "remove"):
+        raise PatchError(
+            f"unsupported op {kind!r}; retrail supports replace, add, remove"
+        )
+    pointer = op.get("path")
+    if not isinstance(pointer, str):
+        raise PatchError("every patch op needs a string 'path'")
+
+    tokens = parse_pointer(pointer)
+    if not tokens:
+        raise PatchError("cannot patch the step root; target a field like /output")
+
+    value = op.get("value", _MISSING)
+    if kind in ("replace", "add") and value is _MISSING:
+        raise PatchError(f"op {kind!r} at {pointer!r} needs a 'value'")
+
+    parent = _descend(doc, tokens, pointer)
+    last = tokens[-1]
+
+    if isinstance(parent, list):
+        if kind == "add" and last == "-":
+            parent.append(value)
+            return doc
+        index = _as_index(last, pointer)
+        if kind == "add":
+            if index > len(parent):
+                raise PatchError(f"path {pointer!r}: index {index} past end of list")
+            parent.insert(index, value)
+        elif index >= len(parent):
+            raise PatchError(
+                f"path {pointer!r}: index {index} out of range (length {len(parent)})"
+            )
+        elif kind == "replace":
+            parent[index] = value
+        else:
+            del parent[index]
+        return doc
+
+    if isinstance(parent, dict):
+        if kind == "replace" and last not in parent:
+            raise PatchError(
+                f"path {pointer!r}: no existing key {last!r} to replace. "
+                "Use op 'add' to create it."
+            )
+        if kind == "remove":
+            if last not in parent:
+                raise PatchError(f"path {pointer!r}: no key {last!r} to remove")
+            del parent[last]
+        else:
+            parent[last] = value
+        return doc
+
+    raise PatchError(
+        f"path {pointer!r}: cannot set a field on {type(parent).__name__}"
+    )
+
+
+def normalize_edit(edit):
+    """Return (apply_fn, provenance) for either edit shape.
+
+    `provenance` is what gets stored on the fork's session row. For a patch
+    that's the patch itself, so the fork fully round-trips. For a callback it's
+    an honest marker: we record that one ran and what it was called, and say
+    plainly that it can't be replayed from the record.
+    """
+    if edit is None:
+        return (lambda step: copy.deepcopy(step)), None
+
+    if isinstance(edit, (dict, list)):
+        patch = copy.deepcopy(edit)
+        return (lambda step: apply_patch(step, patch)), {"type": "patch", "patch": patch}
+
+    if callable(edit):
+        name = getattr(edit, "__name__", repr(edit))
+        return edit, {
+            "type": "callback",
+            "repr": name,
+            "note": "callback edits do not round-trip from this record",
+        }
+
+    raise PatchError(
+        f"edit must be a patch object, a list of patch ops, or a callable - "
+        f"got {type(edit).__name__}"
+    )

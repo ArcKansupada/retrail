@@ -1,0 +1,5 @@
+{
+  "op": "replace",
+  "path": "/output/0/content",
+  "value": "{\"flight_price\": 1200}"
+}

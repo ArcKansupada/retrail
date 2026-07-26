@@ -1,0 +1,198 @@
+"""The same booking agent, against the real Claude API.
+
+This is the live twin of `booking_agent.py`. The loop, the @record contract,
+and the fork/diff/bisect commands are all identical — the only difference is
+that `call_model` really calls `client.messages.create`.
+
+Its job is to exercise the paths a scripted model can never reach:
+
+  * `serialize.to_jsonable` against real Pydantic `Message` objects
+  * real `tool_use` / `tool_result` blocks carrying the `tool_use_id` that
+    fork.py's splice matches on
+  * adaptive thinking blocks surviving a round-trip through retrail's JSON
+  * genuine non-determinism — two forks from one SHA can differ, which is the
+    one thing a deterministic stand-in cannot demonstrate
+
+Needs credentials. Either export ANTHROPIC_API_KEY, or put it in a .env file
+at the repo root (gitignored):
+
+    ANTHROPIC_API_KEY=sk-ant-...
+
+Run:  python examples/live_booking_agent.py
+"""
+
+import json
+import os
+import pathlib
+
+from retrail import record
+
+MODEL = "claude-opus-4-8"
+
+SYSTEM = (
+    "You are a flight booking assistant. Use the tools available to you. "
+    "Search for the flight first, then book it only if the fare is at or under "
+    "the traveller's $600 budget. If it is over budget, do not book — say so "
+    "and stop."
+)
+
+TOOLS = [
+    {
+        "name": "search_flight",
+        "description": "Look up the current fare for a route.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "origin": {"type": "string", "description": "Origin airport code"},
+                "destination": {"type": "string", "description": "Destination code"},
+            },
+            "required": ["origin", "destination"],
+        },
+    },
+    {
+        "name": "book_flight",
+        "description": "Book a flight and return a confirmation code.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "origin": {"type": "string"},
+                "destination": {"type": "string"},
+                "fare_usd": {"type": "number"},
+            },
+            "required": ["origin", "destination", "fare_usd"],
+        },
+    },
+]
+
+
+def load_env(root=None):
+    """Read a .env file into os.environ. Keeps the key out of the transcript."""
+    path = pathlib.Path(root or pathlib.Path(__file__).parent.parent) / ".env"
+    if not path.exists():
+        return False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+    return True
+
+
+def make_client():
+    load_env()
+    import anthropic
+
+    return anthropic.Anthropic()
+
+
+def make_call_model(client, effort="low"):
+    """The one line that differs from the scripted example.
+
+    `effort` is low by default because this exists to validate plumbing, not to
+    exercise the model's intelligence — the task is a two-tool lookup. Raise it
+    if you want to watch it reason.
+    """
+
+    def call_model(messages, tools):
+        return client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=SYSTEM,
+            thinking={"type": "adaptive"},
+            output_config={"effort": effort},
+            tools=tools,
+            messages=messages,
+        )
+
+    return call_model
+
+
+_lazy_client = None
+
+
+def call_model(messages, tools):
+    """The default model call, used when the CLI invokes this agent.
+
+    It must be a real callable at import time — @record wraps the argument
+    before the function body runs, so a `None` sentinel swapped out inside the
+    body would get wrapped instead and blow up on first use. But constructing
+    an Anthropic client at import would demand credentials just to run
+    `--help`. So: a real function that builds its client on first call.
+    """
+    global _lazy_client
+    if _lazy_client is None:
+        _lazy_client = make_client()
+    return make_call_model(_lazy_client)(messages, tools)
+
+
+def execute_tools(response):
+    """Real tool blocks: objects on a live call, dicts when replayed."""
+    results = []
+    for block in response.content:
+        if _get(block, "type") != "tool_use":
+            continue
+        results.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": _get(block, "id"),
+                "content": json.dumps(_run(_get(block, "name"), _get(block, "input"))),
+            }
+        )
+    return results
+
+
+def _get(block, field):
+    return block.get(field) if isinstance(block, dict) else getattr(block, field, None)
+
+
+def _run(name, args):
+    if name == "search_flight":
+        return {"fare_usd": 450, "carrier": "Southwest", "stops": 0}
+    if name == "book_flight":
+        if os.environ.get("RETRAIL_DEMO_OUTAGE"):
+            return {"error": "airline API timed out"}
+        return {"confirmation": "QX7R2M", "fare_usd": args.get("fare_usd")}
+    return {"error": f"unknown tool {name}"}
+
+
+@record(session_name="live-booking")
+def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execute_tools):
+    """Identical in shape to the scripted example's loop.
+
+    The defaults are what let `retrail fork --agent examples.live_booking_agent:
+    run_agent` call this with only the seeded history.
+    """
+    while True:
+        response = call_model(messages, tools)
+        # Append the FULL content list: thinking blocks and their signatures
+        # must be echoed back unchanged, so nothing may be filtered here.
+        messages.append({"role": "assistant", "content": _content(response)})
+        if _get(response, "stop_reason") != "tool_use":
+            return response
+        messages.append({"role": "user", "content": execute_tools(response)})
+
+
+def _content(response):
+    return response.content if not isinstance(response, dict) else response["content"]
+
+
+def final_text(response):
+    blocks = _content(response)
+    texts = [_get(b, "text") for b in blocks if _get(b, "type") == "text"]
+    return texts[-1] if texts else None
+
+
+if __name__ == "__main__":
+    from retrail.cli import echo
+
+    client = make_client()
+    result = run_agent(
+        [{"role": "user", "content": "Book me a flight from AUS to SFO."}],
+        call_model=make_call_model(client),
+    )
+    # Not `print`: a real model answers with emoji, and a bare print of that
+    # dies on a cp1252 console. echo() degrades the glyph instead of the run.
+    echo(final_text(result))
+    echo(f"\nRecorded session {run_agent.last_session_id}")
+    echo(f"  retrail log {run_agent.last_session_id}")

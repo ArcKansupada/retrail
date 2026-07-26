@@ -1,0 +1,20 @@
+.retrail/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# editor / tool local state
+.claude/settings.local.json
+.idea/
+.vscode/
+.DS_Store
+
+# never commit credentials
+.env
