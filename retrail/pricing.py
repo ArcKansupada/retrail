@@ -12,14 +12,14 @@ trusting it for anything that matters.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Union
+from typing import Any
 
 from .types import Step, TrajectoryEntry
 
 #: Either kind of record carries the model call's own usage, so both can be
 #: priced. Keeping this explicit is what lets `trajectory_cost` take the output
 #: of `trajectory()` and `store.steps_for()` without a cast at the call site.
-PricedEntry = Union[Step, TrajectoryEntry]
+PricedEntry = Step | TrajectoryEntry
 
 # (input, output) USD per 1M tokens. Cached 2026-06.
 PRICES: dict[str, tuple[float, float]] = {

@@ -28,7 +28,7 @@ An existing key will not silently change meaning.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Literal, Protocol, TypedDict, Union
+from typing import Any, Literal, Protocol, TypedDict
 
 __all__ = [
     "JSON",
@@ -152,11 +152,11 @@ class PatchOp(_PatchOpRequired, total=False):
     value: JSON
 
 
-Patch = Union[PatchOp, list[PatchOp]]
+Patch = PatchOp | list[PatchOp]
 
 #: What `fork(edit=...)` accepts. A patch round-trips from the stored record; a
 #: callback does not, and says so in its provenance.
-Edit = Union[Patch, Callable[[dict[str, Any]], dict[str, Any]], None]
+Edit = Patch | Callable[[dict[str, Any]], dict[str, Any]] | None
 
 
 class PatchProvenance(TypedDict):
@@ -172,7 +172,7 @@ class CallbackProvenance(TypedDict):
 
 #: Stored on the fork's session row so `retrail log` can show WHAT changed, not
 #: just where.
-EditProvenance = Union[PatchProvenance, CallbackProvenance]
+EditProvenance = PatchProvenance | CallbackProvenance
 
 
 # -- checks and agents --------------------------------------------------------
@@ -191,7 +191,7 @@ class CheckFunction(Protocol):
 
 
 #: A check expression the CLI can parse, or any predicate over the final answer.
-Check = Union[str, Callable[[str | None], bool]]
+Check = str | Callable[[str | None], bool]
 
 
 class Agent(Protocol):

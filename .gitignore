@@ -8,6 +8,7 @@ dist/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.venv*/
 venv/
 
 # editor / tool local state

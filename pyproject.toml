@@ -102,16 +102,6 @@ extend-exclude = ["prototype"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 
-[tool.ruff.lint.per-file-ignores]
-# UP007 wants `X | Y` instead of `Union[X, Y]`. Correct inside an annotation,
-# which `from __future__ import annotations` never evaluates - and every
-# annotation in the package uses the `|` form. These two files also define
-# public type ALIASES, which ARE evaluated at import time, so their spelling is
-# a runtime construct rather than a comment. Ruff itself declines to autofix
-# them for that reason, even with --unsafe-fixes. Union is unambiguous there.
-"retrail/types.py" = ["UP007"]
-"retrail/pricing.py" = ["UP007"]
-
 [tool.mypy]
 python_version = "3.10"
 files = ["retrail"]
