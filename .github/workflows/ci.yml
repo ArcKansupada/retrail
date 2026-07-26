@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every supported version on Linux; the ends of the range on Windows and
+        # macOS. The Windows jobs are not optional - retrail's console-encoding
+        # handling exists specifically for cp1252 terminals, and it was written
+        # after a live run crashed on one.
+        include:
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.11" }
+          - { os: ubuntu-latest, python: "3.12" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.10" }
+          - { os: windows-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.10" }
+          - { os: macos-latest, python: "3.13" }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      # The `live` marker is excluded by pyproject's addopts and no API key is
+      # available here, so this can never spend money. Both guards are wanted:
+      # one is a config line someone could edit, the other is the absence of a
+      # secret.
+      - name: Test
+        run: python -m pytest -q
+
+      - name: Entry points
+        run: |
+          retrail --version
+          python -m retrail --version
+
+  console-encoding:
+    # The regression this guards against was a UnicodeEncodeError raised while
+    # *printing a model's answer* on a cp1252 console. A UTF-8 CI terminal will
+    # never reproduce it, so force the legacy code page and drive the real CLI.
+    name: windows / cp1252 console
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Drive the CLI under code page 1252
+        shell: cmd
+        run: |
+          chcp 1252
+          set PYTHONIOENCODING=cp1252
+          retrail init || exit /b 1
+          retrail list || exit /b 1
+          retrail --help || exit /b 1
+          python -m retrail --version || exit /b 1
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip && python -m pip install ruff
+      - run: ruff check .
+      # `ruff format --check` is deliberately not enforced yet: adopting the
+      # formatter rewrites ~544 lines of hand-laid-out code and deserves its own
+      # commit, not a drive-by in the packaging change. See TODO.md.
+
+  build:
+    name: build + metadata check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip && python -m pip install build twine
+      - run: python -m build
+      # Catches a README that renders on GitHub but not on PyPI, which is only
+      # otherwise discoverable by publishing a bad release.
+      - run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

@@ -7,6 +7,7 @@ import sys
 
 import click
 
+from . import __version__
 from .bisect import bisect as bisect_session
 from .diff import diff as diff_sessions
 from .errors import RetrailError
@@ -79,6 +80,10 @@ class RetrailGroup(click.Group):
 
 
 @click.group(cls=RetrailGroup)
+# Read from the package rather than importlib.metadata: a source checkout that
+# was never pip-installed still has to answer `--version`, and that checkout is
+# exactly where a bug report comes from.
+@click.version_option(__version__, "-V", "--version", prog_name="retrail")
 @click.option("--db", default=None, help="Path to the sessions database.")
 @click.pass_context
 def cli(ctx, db):
@@ -687,7 +692,10 @@ def _render_rerun(result):
         echo(f"  errored       : {len(result['errored'])}")
 
     for regression in result["regressed"]:
-        echo(f"\nREGRESSED  {regression['session_id']}  (resumed at {short(regression['resumed_at'])})")
+        echo(
+            f"\nREGRESSED  {regression['session_id']}  "
+            f"(resumed at {short(regression['resumed_at'])})"
+        )
         echo(f"  was: {regression['before_answer']}")
         echo(f"  now: {regression['answer']}")
         echo(f"  retrail diff {regression['session_id']} {regression['fork_id']}")

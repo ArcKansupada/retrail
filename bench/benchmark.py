@@ -21,7 +21,6 @@ from retrail import record  # noqa: E402
 from retrail.bisect import forkable_steps  # noqa: E402
 from retrail.storage import Store  # noqa: E402
 
-
 # --- a scripted agent, so we measure retrail and not the network ------------
 
 

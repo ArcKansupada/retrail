@@ -1,9 +1,8 @@
 import pytest
 
-from retrail.errors import AmbiguousSha, NotFound
-from retrail.sha import compute_sha
+from retrail.errors import AmbiguousSha, NotFound, ReplayIntegrityError
 from retrail.serialize import canonical_json, to_jsonable
-from retrail.errors import ReplayIntegrityError
+from retrail.sha import compute_sha
 
 
 def test_sha_is_stable_across_dict_ordering():

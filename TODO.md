@@ -11,40 +11,49 @@ Ordered by "what blocks `pip install retrail`" first.
 
 ## P0 — blockers before anyone can install it
 
-- [ ] **Put it under version control.** There is no git repo at all. `git init`, first
-      commit, push. Everything below assumes a remote exists (CI, PyPI trusted
-      publishing, issue links in metadata).
-- [ ] **Add a `LICENSE` file.** `pyproject.toml` declares MIT via
-      `license = { text = "MIT" }` — that form is deprecated in modern packaging and
-      there's no license file in the tree. Move to SPDX `license = "MIT"` +
-      `license-files = ["LICENSE"]` and ship the actual text.
-- [ ] **Fill in project metadata.** Currently missing: `authors`, `keywords`,
-      `classifiers` (Python versions, Development Status, Topic, OS), and
-      `[project.urls]` (Homepage / Repository / Issues / Changelog). This is what the
-      PyPI page is made of.
-- [ ] **Single-source the version.** `__version__ = "0.1.0"` in `retrail/__init__.py`
-      and `version = "0.1.0"` in `pyproject.toml` will drift. Use hatch's
-      `[tool.hatch.version] path = "retrail/__init__.py"` with `dynamic = ["version"]`.
-- [ ] **Add `retrail/__main__.py`.** `cli.py`'s own docstring promises the CLI works
-      "however it's entered — console script, `python -m`, or a test harness", but
-      `python -m retrail` fails today because there's no `__main__.py`.
-- [ ] **Add `retrail --version`.** No version flag exists. First thing anyone types
-      when filing a bug.
-- [ ] **Verify the build artifacts.** `python -m build`, `twine check dist/*`, then
-      install the *wheel* into a clean venv and run the 60-second tour from a temp
-      directory. Confirm the wheel contains only `retrail/` (hatch is configured for
-      that) and that the README renders on PyPI's markdown parser.
-- [ ] **Verify the `>=3.9` floor is real.** It's asserted, never tested — nothing has
-      ever run on 3.9. Either confirm it or raise the floor to what you actually
-      support.
-- [ ] **CI.** GitHub Actions matrix over 3.9–3.13 × {ubuntu, windows, macos} running
-      the offline suite. Windows especially: the cp1252 encoding degradation in
-      `cli.echo()` / `_glyphs()` is real, hard-won logic that currently has no
-      automated coverage on the OS it exists for.
-- [ ] **Release workflow.** Tag-triggered publish via PyPI trusted publishing (no API
-      token in secrets). Do a TestPyPI dry run first.
-- [ ] **Lint/format config.** `ruff` + a `[tool.ruff]` block with `target-version`
-      matching `requires-python`, wired into CI.
+**Done (2026-07-25).** Everything in this section is implemented and verified;
+the two remaining boxes need an action only you can take.
+
+- [x] **Put it under version control.** `git init` + baseline commit. No remote yet.
+- [x] **Add a `LICENSE` file.** MIT text at the repo root, declared with SPDX
+      `license = "MIT"` + `license-files = ["LICENSE"]`. Verified: the wheel ships it
+      at `retrail-0.1.0.dist-info/licenses/LICENSE`.
+- [x] **Fill in project metadata.** authors, keywords, 12 classifiers, and
+      `[project.urls]` pointing at `github.com/arckansupada/retrail`.
+- [x] **Single-source the version.** `[tool.hatch.version] path = "retrail/__init__.py"`
+      with `dynamic = ["version"]`; the duplicate in `pyproject.toml` is gone. The
+      publish workflow refuses to release if the git tag and `__version__` disagree.
+- [x] **Add `retrail/__main__.py`.** `python -m retrail` works, with a subprocess test.
+- [x] **Add `retrail --version`** (`-V`), read from `retrail.__version__` rather than
+      `importlib.metadata` so an uninstalled source checkout can still answer it.
+- [x] **Verify the build artifacts.** `python -m build` + `twine check --strict` both
+      pass. Wheel contains only `retrail/` + dist-info; sdist adds tests, examples, and
+      the design doc, and excludes `prototype/`. Installed the wheel into a clean venv
+      and ran `--version`, `-V`, `python -m retrail`, `init`, `list`, `--help` from a
+      temp directory.
+- [x] **Settle the Python floor.** Raised `>=3.9` → `>=3.10`: 3.9 was EOL in Oct 2025
+      and had never actually been run. Confirmed nothing in the tree uses a 3.11+
+      feature; `itertools.pairwise` (3.10) replaced a bare `zip` pair-walk.
+- [x] **CI.** `.github/workflows/ci.yml` — 3.10–3.13 on Linux, 3.10 + 3.13 on Windows
+      and macOS, plus a dedicated `windows / cp1252 console` job that sets code page
+      1252 and drives the real CLI. That job exists because the source-level ASCII
+      guard in `tests/test_output_encoding.py` cannot catch a runtime encode failure.
+- [x] **Release workflow.** `.github/workflows/publish.yml`, OIDC trusted publishing,
+      no API token in secrets. Setup instructions are in the file's header comment.
+- [x] **Lint config.** `[tool.ruff]` with `target-version = "py310"`, wired into CI.
+      `ruff check .` passes clean (35 findings fixed: import ordering, two lambda
+      assignments in `bisect.py`, `zip` → `pairwise`, ambiguous `l` names in tests).
+
+Still needs you:
+
+- [ ] **Create the GitHub repo and push.** `github.com/arckansupada/retrail` is what the
+      metadata claims; until it exists those URLs 404 and CI has never run.
+- [ ] **Register the PyPI trusted publisher** before the first tag (owner
+      `arckansupada`, repo `retrail`, workflow `publish.yml`, environment `pypi`), and
+      do a TestPyPI dry run.
+- [ ] **Adopt `ruff format` in its own commit.** Deliberately deferred: it rewrites
+      ~544 lines of hand-laid-out code, which would have buried the packaging diff.
+      `ruff format --check` is commented out in CI until then.
 
 ## P1 — things that break once it's a *library*, not a script
 
@@ -150,9 +159,10 @@ Ordered by "what blocks `pip install retrail`" first.
 
 ## P3 — docs, and the launch itself
 
-- [ ] **CHANGELOG.md** + a stated stability policy: say plainly which returned dicts are
-      public API and which are internal. At 0.1 you're allowed to break things — but only
-      if you said which things.
+- [x] **CHANGELOG.md** + a stated stability policy — written during the P0 pass because
+      `[project.urls]` links to it. The policy currently says: the public API is the
+      names exported from `__init__.py` plus the CLI, and the returned dict shapes are
+      *not* frozen until they're typed (P1).
 - [ ] **Docstring pass on the public API** so `help(retrail.fork)` is genuinely enough.
       No docs site needed at 0.1; the README plus docstrings can carry it.
 - [ ] **Test the 60-second tour from a clean clone**, on Windows and macOS, exactly as
@@ -169,7 +179,7 @@ Ordered by "what blocks `pip install retrail`" first.
 
 ### If you only do six things
 
-1. `git init` + LICENSE + metadata + CI *(P0, mechanical, blocks everything)*
+1. ~~`git init` + LICENSE + metadata + CI~~ — **done**, minus pushing to GitHub.
 2. Type hints + `py.typed` *(the dict-shaped API is unusable without them)*
 3. Store discovery walks up to find `.retrail/` *(silent wrong-database bug)*
 4. Raise on async agents *(silent corruption today)*

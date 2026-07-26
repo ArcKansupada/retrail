@@ -74,9 +74,13 @@ def parse_check(expression):
             pattern = re.compile(value)
         except re.error as exc:
             raise CheckError(f"invalid regex {value!r}: {exc}") from None
-        test = lambda answer: bool(pattern.search(answer or ""))
+        def test(answer):
+            return bool(pattern.search(answer or ""))
+
     else:
-        test = lambda answer: value in (answer or "")
+
+        def test(answer):
+            return value in (answer or "")
 
     def check(answer):
         return not test(answer) if negate else test(answer)

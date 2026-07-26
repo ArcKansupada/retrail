@@ -134,7 +134,7 @@ def test_log_show_and_fork_end_to_end(env):
     assert "ran price" in logged.output
 
     # Grab the tool_call's short sha from the log output.
-    tool_line = next(l for l in logged.output.splitlines() if "tool_call" in l)
+    tool_line = next(line for line in logged.output.splitlines() if "tool_call" in line)
     sha = tool_line.split()[0]
 
     shown = run("show", sha)
@@ -174,9 +174,9 @@ def test_fork_rejects_an_undecorated_agent(env):
     run("init")
     record_a_run(db, tmp_path)
     sha = next(
-        l.split()[0]
-        for l in run("log", run("list").output.split()[0]).output.splitlines()
-        if "tool_call" in l
+        line.split()[0]
+        for line in run("log", run("list").output.split()[0]).output.splitlines()
+        if "tool_call" in line
     )
 
     result = run(
@@ -203,7 +203,7 @@ def test_diff_end_to_end(env):
     record_a_run(db, tmp_path)
     session_id = run("list").output.split()[0]
     logged = run("log", session_id)
-    sha = next(l.split()[0] for l in logged.output.splitlines() if "tool_call" in l)
+    sha = next(line.split()[0] for line in logged.output.splitlines() if "tool_call" in line)
 
     edit = tmp_path / "edit.json"
     edit.write_text(
@@ -242,7 +242,7 @@ def test_diff_full_flag_expands_the_shared_prefix(env):
     record_a_run(db, tmp_path)
     a = run("list").output.split()[0]
     sha = next(
-        l.split()[0] for l in run("log", a).output.splitlines() if "tool_call" in l
+        line.split()[0] for line in run("log", a).output.splitlines() if "tool_call" in line
     )
 
     edit = tmp_path / "edit.json"
@@ -409,8 +409,8 @@ def test_sweep_end_to_end(env):
     run, db, tmp_path = env
     session_id = _record_and_get(run, db, tmp_path)
     sha = next(
-        l.split()[0] for l in run("log", session_id).output.splitlines()
-        if "tool_call" in l
+        line.split()[0] for line in run("log", session_id).output.splitlines()
+        if "tool_call" in line
     )
 
     values = tmp_path / "values.json"
@@ -435,8 +435,8 @@ def test_sweep_without_a_check_reports_answers(env):
     run, db, tmp_path = env
     session_id = _record_and_get(run, db, tmp_path)
     sha = next(
-        l.split()[0] for l in run("log", session_id).output.splitlines()
-        if "tool_call" in l
+        line.split()[0] for line in run("log", session_id).output.splitlines()
+        if "tool_call" in line
     )
     values = tmp_path / "values.json"
     values.write_text(json.dumps([json.dumps({"price": 100})]), encoding="utf-8")
@@ -452,8 +452,8 @@ def test_sweep_rejects_a_values_file_that_is_not_a_list(env):
     run, db, tmp_path = env
     session_id = _record_and_get(run, db, tmp_path)
     sha = next(
-        l.split()[0] for l in run("log", session_id).output.splitlines()
-        if "tool_call" in l
+        line.split()[0] for line in run("log", session_id).output.splitlines()
+        if "tool_call" in line
     )
     values = tmp_path / "values.json"
     values.write_text(json.dumps({"not": "a list"}), encoding="utf-8")
@@ -464,3 +464,43 @@ def test_sweep_rejects_a_values_file_that_is_not_a_list(env):
     )
     assert result.exit_code != 0
     assert "expected a JSON array" in result.output
+
+
+# -- entry points -------------------------------------------------------------
+#
+# Both of these are promises made in prose elsewhere (`--version` is the first
+# thing anyone types when filing a bug; `python -m` is named in RetrailGroup's
+# own docstring), so both get a test that fails if the promise stops holding.
+
+
+def test_version_flag_reports_the_package_version():
+    from retrail import __version__
+
+    result = CliRunner().invoke(cli, ["--version"], obj={})
+    assert result.exit_code == 0
+    assert __version__ in result.output
+    assert "retrail" in result.output
+
+
+def test_version_flag_has_a_short_form():
+    result = CliRunner().invoke(cli, ["-V"], obj={})
+    assert result.exit_code == 0
+
+
+def test_python_dash_m_retrail_is_a_working_entry_point():
+    """`python -m retrail` must reach the same CLI as the console script."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from retrail import __version__
+
+    repo_root = Path(__file__).resolve().parent.parent
+    proc = subprocess.run(
+        [sys.executable, "-m", "retrail", "--version"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert __version__ in proc.stdout

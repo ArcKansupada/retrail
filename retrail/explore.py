@@ -31,6 +31,7 @@ is intervention rather than inference -- and it is only possible because
 forking re-executes for real.
 """
 
+import itertools
 import json
 
 from .bisect import forkable_steps, parse_check
@@ -282,7 +283,7 @@ def _boundaries(probes):
     ordered range reads them as the crossing points.
     """
     out = []
-    for earlier, later in zip(probes, probes[1:]):
+    for earlier, later in itertools.pairwise(probes):
         if earlier["passed"] is None or later["passed"] is None:
             continue
         if earlier["passed"] != later["passed"]:

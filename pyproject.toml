@@ -4,25 +4,82 @@ build-backend = "hatchling.build"
 
 [project]
 name = "retrail"
-version = "0.1.0"
-description = "Git for agent trajectories — branch, diff, and bisect LLM agent runs, backed by real re-execution."
+# ASCII on purpose. This string is printed by `pip show` and `pip search`-style
+# tooling, which on a Windows cp1252 console renders an em dash as a replacement
+# character - the same class of bug that the cli.echo()/_glyphs() handling and
+# tests/test_output_encoding.py already exist to prevent.
+description = "Git for agent trajectories - branch, diff, and bisect LLM agent runs, backed by real re-execution."
 readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "MIT" }
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aarav Kansupada", email = "aaravk@utexas.edu" }]
+keywords = [
+    "llm",
+    "agents",
+    "debugging",
+    "observability",
+    "trajectory",
+    "replay",
+    "bisect",
+    "anthropic",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = ["click>=8.0"]
+# Single-sourced from retrail/__init__.py so the package and the metadata can
+# never disagree about what version is installed.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/arckansupada/retrail"
+Repository = "https://github.com/arckansupada/retrail"
+Issues = "https://github.com/arckansupada/retrail/issues"
+Changelog = "https://github.com/arckansupada/retrail/blob/main/CHANGELOG.md"
 
 [project.scripts]
 retrail = "retrail.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+dev = ["pytest>=7.0", "ruff>=0.6", "build>=1.0", "twine>=5.0"]
 # retrail itself never imports an LLM SDK - it intercepts the model call you
 # pass in, so it has no opinion about who you call. The Anthropic SDK is needed
 # only by examples/live_booking_agent.py and the `-m live` tests.
 live = ["anthropic>=0.117"]
 
+[tool.hatch.version]
+path = "retrail/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["retrail"]
+
+[tool.hatch.build.targets.sdist]
+# Ship what makes the project reviewable and reproducible; leave out local
+# scratch. `prototype/` is deliberately throwaway code (see design doc §8) and
+# does not belong in a distribution.
+include = [
+    "retrail/",
+    "tests/",
+    "examples/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "retrail-design-doc.md",
+    "pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -32,3 +89,15 @@ addopts = "-m 'not live'"
 markers = [
     "live: hits the real Claude API and spends money (opt in with -m live)",
 ]
+
+[tool.ruff]
+target-version = "py310"
+# The codebase sits at ~88 by hand. 100 is the ceiling, not the target: it
+# accepts the handful of existing lines that read better unwrapped without
+# licensing new ones.
+line-length = 100
+# Deliberately throwaway code, kept for the record (design doc, milestone 0).
+extend-exclude = ["prototype"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]

@@ -20,7 +20,6 @@ from retrail import record
 from retrail.bisect import CheckError, bisect, forkable_steps, parse_check
 from retrail.errors import RetrailError
 
-
 # --- the flaky world -------------------------------------------------------
 
 

@@ -1,0 +1,67 @@
+name: Publish
+
+# Tag-triggered release. Trusted publishing (OIDC) means there is no PyPI API
+# token stored in this repository at all - the strongest available answer to
+# "what happens if the repo's secrets leak".
+#
+# One-time setup on PyPI, before the first tag:
+#   PyPI -> Publishing -> Add a pending publisher
+#     owner: arckansupada   repo: retrail
+#     workflow: publish.yml  environment: pypi
+#
+# Release checklist:
+#   1. bump __version__ in retrail/__init__.py  (the only place it lives)
+#   2. move the Unreleased section of CHANGELOG.md under the new version
+#   3. git tag v0.1.0 && git push --tags
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip && python -m pip install build twine
+
+      # The tag is the release's claim about what version this is; the package
+      # metadata is the truth. Publishing them out of sync produces a release
+      # nobody can reason about, so fail here instead.
+      - name: Tag must match the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version=$(python -c "import re,pathlib; \
+            print(re.search(r'__version__ = \"([^\"]+)\"', \
+            pathlib.Path('retrail/__init__.py').read_text()).group(1))")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME does not match __version__ $version"
+            exit 1
+          fi
+
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for trusted publishing; nothing else is granted
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

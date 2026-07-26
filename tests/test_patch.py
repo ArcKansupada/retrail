@@ -2,7 +2,6 @@ import pytest
 
 from retrail.patch import PatchError, apply_patch, normalize_edit
 
-
 STEP = {
     "sha": "abc",
     "type": "tool_call",
