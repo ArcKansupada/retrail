@@ -54,7 +54,7 @@ Changelog = "https://github.com/arckansupada/retrail/blob/main/CHANGELOG.md"
 retrail = "retrail.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "ruff>=0.6", "build>=1.0", "twine>=5.0"]
+dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.11", "build>=1.0", "twine>=5.0"]
 # retrail itself never imports an LLM SDK - it intercepts the model call you
 # pass in, so it has no opinion about who you call. The Anthropic SDK is needed
 # only by examples/live_booking_agent.py and the `-m live` tests.
@@ -101,3 +101,30 @@ extend-exclude = ["prototype"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# UP007 wants `X | Y` instead of `Union[X, Y]`. Correct inside an annotation,
+# which `from __future__ import annotations` never evaluates - and every
+# annotation in the package uses the `|` form. These two files also define
+# public type ALIASES, which ARE evaluated at import time, so their spelling is
+# a runtime construct rather than a comment. Ruff itself declines to autofix
+# them for that reason, even with --unsafe-fixes. Union is unambiguous there.
+"retrail/types.py" = ["UP007"]
+"retrail/pricing.py" = ["UP007"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["retrail"]
+# The package is fully annotated, and an unannotated function is the way that
+# silently stops being true - it type-checks trivially and exports Any into
+# every caller. So the floor is "every def has a signature".
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+no_implicit_optional = true
+# Recorded payloads are genuinely arbitrary user JSON (see types.JSON), so
+# Any flows through them by design. Warning on that would be warning about the
+# data model, not about a defect.
+disallow_any_expr = false

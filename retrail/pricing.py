@@ -9,8 +9,20 @@ not a source of truth: check `retrail cost` against your actual bill before
 trusting it for anything that matters.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable
+from typing import Any, Union
+
+from .types import Step, TrajectoryEntry
+
+#: Either kind of record carries the model call's own usage, so both can be
+#: priced. Keeping this explicit is what lets `trajectory_cost` take the output
+#: of `trajectory()` and `store.steps_for()` without a cast at the call site.
+PricedEntry = Union[Step, TrajectoryEntry]
+
 # (input, output) USD per 1M tokens. Cached 2026-06.
-PRICES = {
+PRICES: dict[str, tuple[float, float]] = {
     "claude-fable-5": (10.00, 50.00),
     "claude-mythos-5": (10.00, 50.00),
     "claude-opus-4-8": (5.00, 25.00),
@@ -28,7 +40,7 @@ CACHE_READ_MULTIPLIER = 0.1
 CACHE_WRITE_MULTIPLIER = 1.25
 
 
-def normalize(model):
+def normalize(model: Any) -> str | None:
     """Strip provider prefixes and dated suffixes down to a table key."""
     if not isinstance(model, str):
         return None
@@ -45,7 +57,7 @@ def normalize(model):
     return None
 
 
-def cost_of(serialized_response):
+def cost_of(serialized_response: Any) -> float | None:
     """Cost in USD for one model call, or None if it cannot be known exactly.
 
     Returns None - not zero, and not an estimate - when the model is unknown or
@@ -62,7 +74,7 @@ def cost_of(serialized_response):
 
     input_price, output_price = PRICES[model]
 
-    def tokens(field):
+    def tokens(field: str) -> int:
         value = usage.get(field)
         return value if isinstance(value, int) else 0
 
@@ -74,7 +86,7 @@ def cost_of(serialized_response):
     return (billable * input_price + tokens("output_tokens") * output_price) / 1_000_000
 
 
-def cost_of_step(entry):
+def cost_of_step(entry: PricedEntry) -> float | None:
     """A recorded step's cost, preferring what was actually paid.
 
     The stored `cost_usd` is authoritative: it was computed at record time, at
@@ -94,7 +106,7 @@ def cost_of_step(entry):
     return cost_of(entry.get("output"))
 
 
-def trajectory_cost(entries):
+def trajectory_cost(entries: Iterable[PricedEntry]) -> tuple[float, int]:
     """(cost, unpriced_calls) over a trajectory's model calls.
 
     Reports how many calls could not be priced instead of hiding them, so a
@@ -113,7 +125,7 @@ def trajectory_cost(entries):
     return total, unpriced
 
 
-def fmt(cost):
+def fmt(cost: float | None) -> str:
     if cost is None:
         return "unpriced"
     if cost < 0.01:

@@ -11,15 +11,19 @@ Where (2) can't be met we say so loudly rather than storing a lossy shadow of
 the object and pretending the replay is faithful.
 """
 
+from __future__ import annotations
+
 import dataclasses
 import json
+from typing import Any
 
 from .errors import ReplayIntegrityError
+from .types import JSON
 
 _PRIMITIVES = (str, int, float, bool, type(None))
 
 
-def to_jsonable(obj, _path="", _seen=None):
+def to_jsonable(obj: Any, _path: str = "", _seen: frozenset[int] | None = None) -> JSON:
     """Convert an arbitrary object into JSON-safe primitives.
 
     Handles the shapes SDK response objects actually take: Pydantic models
@@ -27,7 +31,7 @@ def to_jsonable(obj, _path="", _seen=None):
     and ordinary containers.
     """
     if _seen is None:
-        _seen = set()
+        _seen = frozenset()
 
     if isinstance(obj, _PRIMITIVES):
         return obj
@@ -43,7 +47,7 @@ def to_jsonable(obj, _path="", _seen=None):
     _seen = _seen | {marker}
 
     if isinstance(obj, dict):
-        out = {}
+        out: dict[str, JSON] = {}
         for key, value in obj.items():
             if not isinstance(key, str):
                 raise ReplayIntegrityError(
@@ -82,7 +86,7 @@ def to_jsonable(obj, _path="", _seen=None):
     )
 
 
-def canonical_json(obj):
+def canonical_json(obj: JSON) -> str:
     """Deterministic JSON. Feeds both storage and step SHAs.
 
     `sort_keys` is what makes a SHA stable across runs - without it, dict

@@ -504,3 +504,28 @@ def test_python_dash_m_retrail_is_a_working_entry_point():
     )
     assert proc.returncode == 0, proc.stderr
     assert __version__ in proc.stdout
+
+
+def test_package_ships_the_pep561_typed_marker():
+    """py.typed is what makes the annotations visible to a consumer.
+
+    Without it, every downstream `from retrail import ...` is typed as Any no
+    matter how carefully the package is annotated - so the marker is part of
+    the API, not packaging trivia. Asserted against the INSTALLED package, so
+    an editable install and a wheel are both covered.
+    """
+    from pathlib import Path
+
+    import retrail
+
+    assert (Path(retrail.__file__).parent / "py.typed").is_file()
+
+
+def test_public_types_are_importable_from_the_top_level():
+    """Annotating your own code must not require a private-looking submodule."""
+    from retrail import DiffResult, Session, Step, TrajectoryEntry
+
+    assert set(Step.__annotations__) >= {"sha", "step_type", "input", "output"}
+    assert "origin" in TrajectoryEntry.__annotations__
+    assert "parent_session_id" in Session.__annotations__
+    assert "divergence" in DiffResult.__annotations__

@@ -8,26 +8,34 @@ traces back to a line they wrote - which matters when the whole product's
 credibility rests on "the replay is exactly what happened".
 """
 
+from __future__ import annotations
+
 import copy
 import functools
 import inspect
 import time
+from collections.abc import Callable
+from typing import Any, ParamSpec, TypeVar
 
 from .errors import IntegrationError
 from .pricing import cost_of
 from .serialize import to_jsonable
 from .storage import Store
+from .types import JSON
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 # Set by fork() so a re-executed run records into the fork's session (with its
 # parent provenance) instead of minting a fresh root session.
-_pending = {}
+_pending: dict[str, Any] = {}
 
 # One connection per database per process. Without this, every recorded run
 # opens a new sqlite connection and never closes it.
-_default_stores = {}
+_default_stores: dict[str, Store] = {}
 
 
-def _default_store():
+def _default_store() -> Store:
     from .storage import default_db_path
 
     path = default_db_path()
@@ -37,12 +45,12 @@ def _default_store():
 
 
 def record(
-    session_name=None,
-    store=None,
-    model_arg="call_model",
-    tools_arg="execute_tools",
-    messages_arg="messages",
-):
+    session_name: str | None = None,
+    store: Store | None = None,
+    model_arg: str = "call_model",
+    tools_arg: str = "execute_tools",
+    messages_arg: str = "messages",
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Record every step of a raw agent loop.
 
         @record(session_name="booking-agent")
@@ -57,9 +65,14 @@ def record(
     `messages` must be a parameter, not a blank start assumed inside the body.
     That is the one non-negotiable convention: it's what lets a fork seed the
     loop with edited history and get genuine re-execution.
+
+    The decorated function keeps its own signature, so your call sites stay
+    checked. It also gains `last_session_id` and `__retrail_agent__`; those are
+    set with `type: ignore` because a function object has no such attributes
+    statically, which is exactly what `types.Agent` describes.
     """
 
-    def decorator(fn):
+    def decorator(fn: Callable[P, R]) -> Callable[P, R]:
         signature = inspect.signature(fn)
         for name in (messages_arg, model_arg, tools_arg):
             if name not in signature.parameters:
@@ -71,7 +84,7 @@ def record(
                 )
 
         @functools.wraps(fn)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             bound = signature.bind(*args, **kwargs)
             bound.apply_defaults()
 
@@ -107,7 +120,7 @@ def record(
             bound.arguments[model_arg] = recorder.wrap_model(bound.arguments[model_arg])
             bound.arguments[tools_arg] = recorder.wrap_tools(bound.arguments[tools_arg])
 
-            wrapper.last_session_id = session_id
+            wrapper.last_session_id = session_id  # type: ignore[attr-defined]
             try:
                 result = fn(*bound.args, **bound.kwargs)
             except BaseException:
@@ -119,24 +132,24 @@ def record(
             active_store.set_status(session_id, "complete")
             return result
 
-        wrapper.last_session_id = None
-        wrapper.__retrail_agent__ = True
+        wrapper.last_session_id = None  # type: ignore[attr-defined]
+        wrapper.__retrail_agent__ = True  # type: ignore[attr-defined]
         return wrapper
 
     return decorator
 
 
 class _Recorder:
-    def __init__(self, store, session_id):
+    def __init__(self, store: Store, session_id: str) -> None:
         self.store = store
         self.session_id = session_id
 
-    def _next(self):
+    def _next(self) -> int:
         return self.store.next_step_number(self.session_id)
 
-    def wrap_model(self, call_model):
+    def wrap_model(self, call_model: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(call_model)
-        def wrapped(messages, *args, **kwargs):
+        def wrapped(messages: Any, *args: Any, **kwargs: Any) -> Any:
             # Snapshot the history VERBATIM, exactly as the user's loop built
             # it, before the model sees it. This snapshot is what a fork later
             # replays - we never reconstruct history from parts, because
@@ -163,9 +176,9 @@ class _Recorder:
 
         return wrapped
 
-    def wrap_tools(self, execute_tools):
+    def wrap_tools(self, execute_tools: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(execute_tools)
-        def wrapped(response, *args, **kwargs):
+        def wrapped(response: Any, *args: Any, **kwargs: Any) -> Any:
             started = time.perf_counter()
             results = execute_tools(response, *args, **kwargs)
             elapsed_ms = (time.perf_counter() - started) * 1000
@@ -183,7 +196,7 @@ class _Recorder:
         return wrapped
 
 
-def _tool_uses(serialized_response):
+def _tool_uses(serialized_response: JSON) -> JSON:
     content = serialized_response.get("content") if isinstance(
         serialized_response, dict
     ) else None
@@ -192,7 +205,7 @@ def _tool_uses(serialized_response):
     return [b for b in content if isinstance(b, dict) and b.get("type") == "tool_use"]
 
 
-def _usage(serialized_response):
+def _usage(serialized_response: JSON) -> tuple[int | None, float | None]:
     """Best-effort token/cost accounting. Absent usage is fine, not an error.
 
     Cost is None whenever it cannot be known exactly - an unknown model, or a

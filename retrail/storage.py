@@ -4,14 +4,18 @@ A fork is a new session row rather than a mutation, so original sessions stay
 intact and comparable no matter how many times you branch off them.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
 import time
 import uuid
+from typing import Any, cast
 
 from .errors import AmbiguousSha, NotFound
 from .sha import compute_sha
+from .types import JSON, EditProvenance, Session, SessionStatus, Step, StepType
 
 DEFAULT_DIR = ".retrail"
 DB_NAME = "sessions.db"
@@ -51,12 +55,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 """
 
 
-def default_db_path(root=None):
+def default_db_path(root: str | None = None) -> str:
     return os.path.join(root or os.getcwd(), DEFAULT_DIR, DB_NAME)
 
 
 class Store:
-    def __init__(self, path=None):
+    path: str
+    conn: sqlite3.Connection
+
+    def __init__(self, path: str | None = None) -> None:
         self.path = path or default_db_path()
         os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
         self.conn = sqlite3.connect(self.path)
@@ -78,26 +85,26 @@ class Store:
         self.conn.executescript(SCHEMA)
         self.conn.commit()
 
-    def close(self):
+    def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Store:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         self.close()
 
     # -- sessions ---------------------------------------------------------
 
     def create_session(
         self,
-        name,
-        parent_session_id=None,
-        parent_sha=None,
-        forked_at_step=None,
-        edit=None,
-        status="running",
-    ):
+        name: str | None,
+        parent_session_id: str | None = None,
+        parent_sha: str | None = None,
+        forked_at_step: int | None = None,
+        edit: EditProvenance | None = None,
+        status: SessionStatus = "running",
+    ) -> str:
         session_id = "s_" + uuid.uuid4().hex[:10]
         self.conn.execute(
             "INSERT INTO sessions (id, name, parent_session_id, parent_sha, "
@@ -117,39 +124,39 @@ class Store:
         self.conn.commit()
         return session_id
 
-    def set_status(self, session_id, status):
+    def set_status(self, session_id: str, status: SessionStatus) -> None:
         self.conn.execute(
             "UPDATE sessions SET status = ? WHERE id = ?", (status, session_id)
         )
         self.conn.commit()
 
-    def get_session(self, session_id):
+    def get_session(self, session_id: str) -> Session:
         row = self.conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (session_id,)
         ).fetchone()
         if row is None:
             raise NotFound(f"no session {session_id!r}")
-        return dict(row)
+        return cast(Session, dict(row))
 
-    def list_sessions(self):
+    def list_sessions(self) -> list[Session]:
         rows = self.conn.execute(
             "SELECT * FROM sessions ORDER BY created_at ASC"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [cast(Session, dict(r)) for r in rows]
 
     # -- steps ------------------------------------------------------------
 
     def add_step(
         self,
-        session_id,
-        step_number,
-        step_type,
-        input_obj,
-        output_obj,
-        tokens_used=None,
-        cost_usd=None,
-        duration_ms=None,
-    ):
+        session_id: str,
+        step_number: int,
+        step_type: StepType,
+        input_obj: JSON,
+        output_obj: JSON,
+        tokens_used: int | None = None,
+        cost_usd: float | None = None,
+        duration_ms: float | None = None,
+    ) -> str:
         from .serialize import canonical_json
 
         sha = compute_sha(session_id, step_number, step_type, input_obj, output_obj)
@@ -173,21 +180,21 @@ class Store:
         self.conn.commit()
         return sha
 
-    def steps_for(self, session_id):
+    def steps_for(self, session_id: str) -> list[Step]:
         rows = self.conn.execute(
             "SELECT * FROM steps WHERE session_id = ? ORDER BY step_number ASC",
             (session_id,),
         ).fetchall()
         return [_step(r) for r in rows]
 
-    def next_step_number(self, session_id):
+    def next_step_number(self, session_id: str) -> int:
         row = self.conn.execute(
             "SELECT MAX(step_number) AS n FROM steps WHERE session_id = ?",
             (session_id,),
         ).fetchone()
         return 0 if row["n"] is None else row["n"] + 1
 
-    def resolve_sha(self, prefix):
+    def resolve_sha(self, prefix: str) -> str:
         """Resolve a (possibly abbreviated) SHA to exactly one step."""
         prefix = prefix.strip().lower()
         if not prefix:
@@ -201,14 +208,14 @@ class Store:
             raise AmbiguousSha(prefix, [r["sha"] for r in rows])
         return rows[0]["sha"]
 
-    def get_step(self, sha_or_prefix):
+    def get_step(self, sha_or_prefix: str) -> Step:
         sha = self.resolve_sha(sha_or_prefix)
         row = self.conn.execute("SELECT * FROM steps WHERE sha = ?", (sha,)).fetchone()
         return _step(row)
 
 
-def _step(row):
+def _step(row: sqlite3.Row) -> Step:
     d = dict(row)
     d["input"] = json.loads(d.pop("input_json"))
     d["output"] = json.loads(d.pop("output_json"))
-    return d
+    return cast(Step, d)

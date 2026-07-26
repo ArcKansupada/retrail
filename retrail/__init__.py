@@ -22,6 +22,42 @@ from .regress import rerun
 from .storage import Store
 from .trajectory import trajectory
 
+# The shapes every function above returns. Re-exported so annotating your own
+# code never means importing from a private-looking submodule:
+#
+#     from retrail import Step, DiffResult
+#
+# See retrail/types.py, and CHANGELOG.md for what "stable" means before 1.0.
+from .types import (
+    JSON,
+    AblateProbe,
+    AblateResult,
+    Agent,
+    BisectProbe,
+    BisectResult,
+    Check,
+    CheckFunction,
+    DiffBlock,
+    DiffResult,
+    Divergence,
+    Edit,
+    EditProvenance,
+    Origin,
+    Patch,
+    PatchOp,
+    RerunOutcome,
+    RerunResult,
+    RerunVerdict,
+    Session,
+    SessionStatus,
+    Step,
+    StepType,
+    SweepBoundary,
+    SweepProbe,
+    SweepResult,
+    TrajectoryEntry,
+)
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -42,5 +78,33 @@ __all__ = [
     "AmbiguousSha",
     "ReplayIntegrityError",
     "IntegrationError",
+    # types
+    "JSON",
+    "AblateProbe",
+    "AblateResult",
+    "Agent",
+    "BisectProbe",
+    "BisectResult",
+    "Check",
+    "CheckFunction",
+    "DiffBlock",
+    "DiffResult",
+    "Divergence",
+    "Edit",
+    "EditProvenance",
+    "Origin",
+    "Patch",
+    "PatchOp",
+    "RerunOutcome",
+    "RerunResult",
+    "RerunVerdict",
+    "Session",
+    "SessionStatus",
+    "Step",
+    "StepType",
+    "SweepBoundary",
+    "SweepProbe",
+    "SweepResult",
+    "TrajectoryEntry",
     "__version__",
 ]

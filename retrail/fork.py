@@ -13,15 +13,28 @@ Where the patch cannot be verified, this module raises instead of guessing.
 A silently-wrong replay would be worse than no replay at all.
 """
 
+from __future__ import annotations
+
 import copy
+from collections.abc import Sequence
+from typing import Any
 
 from .errors import IntegrationError, ReplayIntegrityError
 from .patch import normalize_edit
 from .record import _pending
 from .storage import Store
+from .types import JSON, Agent, Edit, Step
 
 
-def fork(from_sha, edit=None, agent=None, store=None, name=None, agent_args=(), **agent_kwargs):
+def fork(
+    from_sha: str,
+    edit: Edit = None,
+    agent: Agent | None = None,
+    store: Store | None = None,
+    name: str | None = None,
+    agent_args: Sequence[Any] = (),
+    **agent_kwargs: Any,
+) -> str:
     """Fork a recorded run at `from_sha` and resume it live.
 
         fork(
@@ -82,7 +95,7 @@ def fork(from_sha, edit=None, agent=None, store=None, name=None, agent_args=(), 
             store.close()
 
 
-def _public(step):
+def _public(step: Step) -> dict[str, Any]:
     return {
         "sha": step["sha"],
         "step_number": step["step_number"],
@@ -92,7 +105,7 @@ def _public(step):
     }
 
 
-def _seed_messages(store, step, edited):
+def _seed_messages(store: Store, step: Step, edited: dict[str, Any]) -> list[JSON]:
     if step["step_type"] == "model_call":
         # The recorded input IS the state at this point. Nothing to splice:
         # patch the history directly and let the model decide again.
@@ -113,7 +126,7 @@ def _seed_messages(store, step, edited):
     return _splice_tool_output(store, step, edited)
 
 
-def _splice_tool_output(store, step, edited):
+def _splice_tool_output(store: Store, step: Step, edited: dict[str, Any]) -> list[JSON]:
     following = _next_model_call(store, step)
     if following is None:
         raise ReplayIntegrityError(
@@ -173,8 +186,8 @@ def _splice_tool_output(store, step, edited):
     return seed
 
 
-def _by_tool_use_id(results, label):
-    out = {}
+def _by_tool_use_id(results: list[JSON], label: str) -> dict[str, JSON]:
+    out: dict[str, JSON] = {}
     for entry in results:
         if not isinstance(entry, dict) or "tool_use_id" not in entry:
             raise ReplayIntegrityError(
@@ -186,7 +199,7 @@ def _by_tool_use_id(results, label):
     return out
 
 
-def _find_result_block(messages, tool_use_id):
+def _find_result_block(messages: list[JSON], tool_use_id: str) -> JSON:
     for message in messages:
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, list):
@@ -197,7 +210,7 @@ def _find_result_block(messages, tool_use_id):
     return None
 
 
-def _verify_verbatim(block, recorded_entry, tool_use_id):
+def _verify_verbatim(block: JSON, recorded_entry: JSON, tool_use_id: str) -> None:
     """The recorded output must appear in the history exactly as recorded.
 
     If the loop transformed the result before appending it, our patch would land
@@ -219,7 +232,7 @@ def _verify_verbatim(block, recorded_entry, tool_use_id):
             )
 
 
-def _next_model_call(store, step):
+def _next_model_call(store: Store, step: Step) -> Step | None:
     for candidate in store.steps_for(step["session_id"]):
         if (
             candidate["step_number"] > step["step_number"]

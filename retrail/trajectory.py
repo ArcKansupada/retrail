@@ -15,15 +15,23 @@ That distinction is one of the design doc's open questions, and it is answered
 here by construction rather than by a heuristic.
 """
 
+from __future__ import annotations
+
 import copy
+from typing import TYPE_CHECKING, cast
+
+from .types import JSON, EditProvenance, Origin, Session, Step, TrajectoryEntry
+
+if TYPE_CHECKING:
+    from .storage import Store
 
 
-def trajectory(store, session_id):
+def trajectory(store: Store, session_id: str) -> list[TrajectoryEntry]:
     """The full path of steps from the root run through to this session's tip."""
     return _walk(store, session_id, set())
 
 
-def _walk(store, session_id, seen):
+def _walk(store: Store, session_id: str, seen: set[str]) -> list[TrajectoryEntry]:
     if session_id in seen:
         raise ValueError(f"cycle in session ancestry at {session_id}")
     seen = seen | {session_id}
@@ -52,11 +60,14 @@ def _walk(store, session_id, seen):
         # So the step itself is part of the replayed prefix - but the fork saw a
         # different output for it than the parent recorded, and that difference
         # is the whole reason the trajectories diverge. Show what the fork saw.
-        forked_from = dict(
-            forked_from,
-            output=_as_seen_by(store, session_id, forked_from),
-            edited=True,
-            edit=_edit_of(session),
+        forked_from = cast(
+            TrajectoryEntry,
+            dict(
+                forked_from,
+                output=_as_seen_by(store, session_id, forked_from),
+                edited=True,
+                edit=_edit_of(session),
+            ),
         )
         prefix = ancestors[:cut] + [forked_from]
     else:
@@ -64,12 +75,15 @@ def _walk(store, session_id, seen):
         # parent's version of it is not part of the fork's path at all.
         prefix = ancestors[:cut]
         if own:
-            own[0] = dict(own[0], edited=True, edit=_edit_of(session))
+            own[0] = cast(
+                TrajectoryEntry,
+                dict(own[0], edited=True, edit=_edit_of(session)),
+            )
 
     return prefix + own
 
 
-def _as_seen_by(store, session_id, forked_from):
+def _as_seen_by(store: Store, session_id: str, forked_from: TrajectoryEntry) -> JSON:
     """Recover the tool output the fork actually resumed with.
 
     The fork's first model call recorded its input verbatim, and that input is
@@ -96,25 +110,27 @@ def _as_seen_by(store, session_id, forked_from):
     ]
 
 
-def _edit_of(session):
+def _edit_of(session: Session) -> EditProvenance | None:
     import json
 
     if not session["edit_json"]:
         return None
     try:
-        return json.loads(session["edit_json"])
+        return cast(EditProvenance, json.loads(session["edit_json"]))
     except ValueError:
         return None
 
 
-def _index_of(entries, session_id, step_number):
+def _index_of(
+    entries: list[TrajectoryEntry], session_id: str, step_number: int | None
+) -> int | None:
     for i, entry in enumerate(entries):
         if entry["session_id"] == session_id and entry["step_number"] == step_number:
             return i
     return None
 
 
-def _entry(step, origin):
+def _entry(step: Step, origin: Origin) -> TrajectoryEntry:
     return {
         "sha": step["sha"],
         "session_id": step["session_id"],

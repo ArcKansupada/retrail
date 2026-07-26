@@ -89,6 +89,19 @@ jobs:
       # formatter rewrites ~544 lines of hand-laid-out code and deserves its own
       # commit, not a drive-by in the packaging change. See TODO.md.
 
+  types:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # The floor, not the ceiling: annotations that only resolve on a newer
+          # runtime are exactly the breakage py.typed would export to users.
+          python-version: "3.10"
+      - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - run: python -m mypy
+
   build:
     name: build + metadata check
     runs-on: ubuntu-latest

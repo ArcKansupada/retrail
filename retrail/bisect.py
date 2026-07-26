@@ -28,12 +28,27 @@ candidate and requires unanimity before calling it good, which trades API calls
 for confidence.
 """
 
+from __future__ import annotations
+
 import re
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
 from .diff import final_answer
 from .errors import RetrailError
 from .fork import fork
 from .trajectory import trajectory
+from .types import (
+    Agent,
+    BisectProbe,
+    BisectResult,
+    Check,
+    CheckFunction,
+    Step,
+)
+
+if TYPE_CHECKING:
+    from .storage import Store
 
 
 class CheckError(RetrailError):
@@ -47,7 +62,7 @@ _CHECK = re.compile(
 )
 
 
-def parse_check(expression):
+def parse_check(expression: str) -> CheckFunction:
     """Parse a check expression into a predicate over the final answer.
 
         output contains 'confirmed'
@@ -74,22 +89,33 @@ def parse_check(expression):
             pattern = re.compile(value)
         except re.error as exc:
             raise CheckError(f"invalid regex {value!r}: {exc}") from None
-        def test(answer):
+        def test(answer: str | None) -> bool:
             return bool(pattern.search(answer or ""))
 
     else:
 
-        def test(answer):
+        def test(answer: str | None) -> bool:
             return value in (answer or "")
 
-    def check(answer):
+    def check(answer: str | None) -> bool:
         return not test(answer) if negate else test(answer)
 
-    check.expression = expression
-    return check
+    # A plain function has no `expression` attribute statically; CheckFunction
+    # is the protocol that says the returned object does.
+    check.expression = expression  # type: ignore[attr-defined]
+    return cast(CheckFunction, check)
 
 
-def forkable_steps(store, session_id):
+def describe_check(check: Callable[..., Any]) -> str:
+    """How a result should name the check it applied.
+
+    A parsed check reports its source expression; a user's callable reports its
+    name. Neither should ever surface as `<function check at 0x7f...>`.
+    """
+    return str(getattr(check, "expression", getattr(check, "__name__", "<callable>")))
+
+
+def forkable_steps(store: Store, session_id: str) -> list[Step]:
     """Steps we can honestly resume from.
 
     A trailing tool_call is excluded: the message state after it was never
@@ -102,15 +128,15 @@ def forkable_steps(store, session_id):
 
 
 def bisect(
-    store,
-    session_id,
-    check,
-    agent,
-    agent_args=(),
-    samples=1,
-    on_probe=None,
-    **agent_kwargs,
-):
+    store: Store,
+    session_id: str,
+    check: Check,
+    agent: Agent,
+    agent_args: Sequence[Any] = (),
+    samples: int = 1,
+    on_probe: Callable[[BisectProbe], None] | None = None,
+    **agent_kwargs: Any,
+) -> BisectResult:
     """Find the earliest step from which the agent can no longer recover.
 
     Returns a result dict with the culprit step, every probe that was run, and
@@ -132,10 +158,10 @@ def bisect(
             f"failure to localize. Final answer was: {original_answer!r}"
         )
 
-    probes = []
-    cache = {}
+    probes: list[BisectProbe] = []
+    cache: dict[int, bool] = {}
 
-    def probe(index):
+    def probe(index: int) -> bool:
         """True if the agent recovered when resumed from candidates[index]."""
         if index in cache:
             return cache[index]
@@ -153,7 +179,7 @@ def bisect(
             )
             answer = final_answer(trajectory(store, fork_id))
             passed = check(answer)
-            record = {
+            record: BisectProbe = {
                 "step_number": step["step_number"],
                 "sha": step["sha"],
                 "session_id": fork_id,
@@ -183,7 +209,7 @@ def bisect(
 
     return {
         "session_id": session_id,
-        "check": getattr(check, "expression", getattr(check, "__name__", "<callable>")),
+        "check": describe_check(check),
         "original_answer": original_answer,
         "candidates": candidates,
         "probes": probes,

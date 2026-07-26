@@ -12,14 +12,28 @@ leading run of equal signatures and the divergence point is the first step
 where the runs stop agreeing.
 """
 
+from __future__ import annotations
+
 import hashlib
+from collections.abc import Sequence
 from difflib import SequenceMatcher
+from typing import TYPE_CHECKING
 
 from .serialize import canonical_json
 from .trajectory import trajectory
+from .types import (
+    JSON,
+    DiffBlock,
+    DiffResult,
+    Divergence,
+    TrajectoryEntry,
+)
+
+if TYPE_CHECKING:
+    from .storage import Store
 
 
-def signature(entry):
+def signature(entry: TrajectoryEntry) -> str:
     """A step's identity for alignment: what it did, and what came back."""
     if entry["step_type"] == "model_call":
         out = entry["output"] if isinstance(entry["output"], dict) else {}
@@ -27,17 +41,17 @@ def signature(entry):
     return f"tool_call|{','.join(tool_names(entry))}|{_digest(entry['output'])}"
 
 
-def tool_names(entry):
+def tool_names(entry: TrajectoryEntry) -> list[str]:
     if not isinstance(entry["input"], list):
         return []
     return [b["name"] for b in entry["input"] if isinstance(b, dict) and b.get("name")]
 
 
-def _digest(obj):
+def _digest(obj: JSON) -> str:
     return hashlib.sha256(canonical_json(obj).encode("utf-8")).hexdigest()[:12]
 
 
-def final_answer(entries):
+def final_answer(entries: Sequence[TrajectoryEntry]) -> str | None:
     """The last thing the agent actually said."""
     for entry in reversed(entries):
         if entry["step_type"] != "model_call":
@@ -51,7 +65,7 @@ def final_answer(entries):
     return None
 
 
-def common_ancestor(store, a_id, b_id):
+def common_ancestor(store: Store, a_id: str, b_id: str) -> str | None:
     """The nearest session both trajectories descend through."""
     a_chain = _ancestry(store, a_id)
     b_chain = set(_ancestry(store, b_id))
@@ -61,10 +75,10 @@ def common_ancestor(store, a_id, b_id):
     return None
 
 
-def _ancestry(store, session_id):
-    chain = []
-    seen = set()
-    current = session_id
+def _ancestry(store: Store, session_id: str) -> list[str]:
+    chain: list[str] = []
+    seen: set[str] = set()
+    current: str | None = session_id
     while current and current not in seen:
         seen.add(current)
         chain.append(current)
@@ -72,7 +86,7 @@ def _ancestry(store, session_id):
     return chain
 
 
-def diff(store, a_id, b_id):
+def diff(store: Store, a_id: str, b_id: str) -> DiffResult:
     a = trajectory(store, a_id)
     b = trajectory(store, b_id)
 
@@ -80,7 +94,7 @@ def diff(store, a_id, b_id):
     sig_b = [signature(e) for e in b]
     opcodes = SequenceMatcher(None, sig_a, sig_b, autojunk=False).get_opcodes()
 
-    blocks = [
+    blocks: list[DiffBlock] = [
         {"tag": tag, "a": a[i1:i2], "b": b[j1:j2]}
         for tag, i1, i2, j1, j2 in opcodes
     ]
@@ -102,17 +116,25 @@ def diff(store, a_id, b_id):
     }
 
 
-def _divergence(block):
+def _divergence(block: DiffBlock | None) -> Divergence | None:
     if block is None:
         return None
     first_a = block["a"][0] if block["a"] else None
     first_b = block["b"][0] if block["b"] else None
+    anchor = first_a or first_b
+    if anchor is None:
+        # difflib does not emit an empty non-equal block, so this is
+        # unreachable. It was previously unreachable AND unstated, which meant
+        # the only record of the invariant was that `(first_a or first_b)["sha"]`
+        # happened not to crash.
+        return None
     edited = next(
         (e for e in (block["b"] or []) + (block["a"] or []) if e.get("edited")), None
     )
-    return {
+    divergence: Divergence = {
         "a": first_a,
         "b": first_b,
         "edit": edited["edit"] if edited else None,
-        "sha": (first_a or first_b)["sha"],
+        "sha": anchor["sha"],
     }
+    return divergence

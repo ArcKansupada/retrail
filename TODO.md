@@ -57,13 +57,14 @@ Still needs you:
 
 ## P1 — things that break once it's a *library*, not a script
 
-- [ ] **Type hints + `py.typed`.** There is not one annotation in the package. For a
-      library whose entire public contract is *dicts* — a step dict, a session dict,
-      the shapes returned by `diff()` / `bisect()` / `ablate()` — this is the single
-      biggest usability gap. Annotate the public surface, add `TypedDict`s for
-      `Step`/`Session`/`DiffResult`/`BisectResult`, ship `py.typed`, run mypy or
-      pyright in CI. Right now those shapes are documented only in prose, which means
-      they aren't documented at all.
+- [x] **Type hints + `py.typed`.** *(done 2026-07-26)* Every function in the package
+      is annotated and mypy runs clean under `disallow_untyped_defs` /
+      `disallow_incomplete_defs`, on 3.10 in CI. `retrail/types.py` declares all 27
+      public shapes, re-exported from the top level. Verified end to end: a consumer
+      installed from the built wheel gets key typos, an unguarded Optional, a wrong
+      argument type, and a missing argument all flagged — with "did you mean"
+      suggestions. Three latent issues surfaced and were fixed along the way (see
+      below).
 - [ ] **Find the store by walking up, like git does.** `default_db_path()` is
       `os.getcwd() + "/.retrail"`, full stop. Consequences: running `retrail log` from
       a subdirectory silently creates a *second, empty* store instead of finding the
@@ -177,10 +178,25 @@ Still needs you:
 
 ---
 
+### What the typing pass turned up
+
+Three things mypy found that were latent, not stylistic. All fixed:
+
+- `cli.py` built a step summary with `', '.join(b.get("type") ...)` over model
+  output. A content block without a `type` key put a `None` in that list and
+  `str.join` raises on it — `retrail log` would die printing a trace, which is the
+  same failure shape as the cp1252 encoding bug.
+- `diff._divergence` ended with `(first_a or first_b)["sha"]`. difflib never emits
+  an empty non-equal block so it cannot fire, but the invariant existed nowhere
+  except in that expression not crashing. Now explicit.
+- `_render_bisect` indexed `result["culprit"]` behind a guard on a *different* key
+  (`unreproducible`). The two are equivalent by construction in `bisect()`; the
+  guard now says so directly.
+
 ### If you only do six things
 
 1. ~~`git init` + LICENSE + metadata + CI~~ — **done**, minus pushing to GitHub.
-2. Type hints + `py.typed` *(the dict-shaped API is unusable without them)*
+2. ~~Type hints + `py.typed`~~ — **done.**
 3. Store discovery walks up to find `.retrail/` *(silent wrong-database bug)*
 4. Raise on async agents *(silent corruption today)*
 5. `retrail export` / `import` *(the sharable-repro feature, cheap to build)*

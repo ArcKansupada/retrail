@@ -36,15 +36,24 @@ So the economics are real but they are not free: you have to know which
 decision you are testing. `--at-tool` is how you say it.
 """
 
-from .bisect import forkable_steps, parse_check
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any
+
+from .bisect import describe_check, forkable_steps, parse_check
 from .diff import final_answer
 from .errors import RetrailError
 from .fork import fork
 from .pricing import trajectory_cost
 from .trajectory import trajectory
+from .types import Agent, Check, RerunOutcome, RerunResult, RerunVerdict, Step
+
+if TYPE_CHECKING:
+    from .storage import Store
 
 
-def recorded_runs(store):
+def recorded_runs(store: Store) -> list[str]:
     """The root sessions that make up the corpus.
 
     Forks are excluded: they are experiments *about* a run, not runs of their
@@ -58,7 +67,9 @@ def recorded_runs(store):
     ]
 
 
-def _resume_point(store, session_id, where, at_tool=None):
+def _resume_point(
+    store: Store, session_id: str, where: str, at_tool: str | None = None
+) -> Step | None:
     candidates = forkable_steps(store, session_id)
     if not candidates:
         return None
@@ -85,16 +96,16 @@ def _resume_point(store, session_id, where, at_tool=None):
 
 
 def rerun(
-    store,
-    check,
-    agent,
-    sessions=None,
-    where="first",
-    at_tool=None,
-    agent_args=(),
-    on_result=None,
-    **agent_kwargs,
-):
+    store: Store,
+    check: Check,
+    agent: Agent,
+    sessions: Sequence[str] | None = None,
+    where: str = "first",
+    at_tool: str | None = None,
+    agent_args: Sequence[Any] = (),
+    on_result: Callable[[RerunOutcome], None] | None = None,
+    **agent_kwargs: Any,
+) -> RerunResult:
     """Re-execute recorded runs against the current code and report changes."""
     if isinstance(check, str):
         check = parse_check(check)
@@ -106,7 +117,7 @@ def rerun(
             "they are the corpus."
         )
 
-    results = []
+    results: list[RerunOutcome] = []
     for session_id in targets:
         before_answer = final_answer(trajectory(store, session_id))
         before = check(before_answer)
@@ -162,7 +173,7 @@ def rerun(
             [e for e in trajectory(store, fork_id) if e["origin"] == "live"]
         )
 
-        result = {
+        result: RerunOutcome = {
             "session_id": session_id,
             "fork_id": fork_id,
             "resumed_at": step["sha"],
@@ -183,19 +194,21 @@ def rerun(
 
     priced = [r["cost_usd"] for r in results if r["cost_usd"] is not None]
     return {
-        "check": getattr(check, "expression", getattr(check, "__name__", "<callable>")),
+        "check": describe_check(check),
         "resumed_from": f"tool:{at_tool}" if at_tool else where,
         "results": results,
         "regressed": [r for r in results if r["verdict"] == "regressed"],
         "fixed": [r for r in results if r["verdict"] == "fixed"],
-        "unchanged": [r for r in results if r["verdict"] in ("still passing", "still failing")],
+        "unchanged": [
+            r for r in results if r["verdict"] in ("still passing", "still failing")
+        ],
         "errored": [r for r in results if r["verdict"] in ("errored", "skipped")],
         "model_calls": sum(r["model_calls"] for r in results),
         "cost_usd": sum(priced) if priced else None,
     }
 
 
-def _verdict(before, after):
+def _verdict(before: bool, after: bool) -> RerunVerdict:
     if before and not after:
         return "regressed"
     if not before and after:

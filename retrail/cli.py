@@ -1,9 +1,12 @@
 """CLI surface. SHA prefix matching applies throughout, same as git."""
 
+from __future__ import annotations
+
 import importlib
 import json
 import os
 import sys
+from typing import Any
 
 import click
 
@@ -20,17 +23,33 @@ from .regress import rerun as rerun_sessions
 from .sha import short
 from .storage import Store, default_db_path
 from .trajectory import trajectory
+from .types import (
+    AblateProbe,
+    AblateResult,
+    Agent,
+    BisectProbe,
+    BisectResult,
+    DiffResult,
+    EditProvenance,
+    RerunOutcome,
+    RerunResult,
+    Session,
+    Step,
+    SweepProbe,
+    SweepResult,
+    TrajectoryEntry,
+)
 
 
-def _store(ctx):
+def _store(ctx: click.Context) -> Store:
     return Store(ctx.obj["db"])
 
 
-def _console_encoding():
+def _console_encoding() -> str:
     return getattr(sys.stdout, "encoding", None) or "utf-8"
 
 
-def echo(text=""):
+def echo(text: object = "") -> None:
     """click.echo, but it cannot be killed by a character.
 
     Everything retrail prints is downstream of model output: diff shows final
@@ -48,7 +67,7 @@ def echo(text=""):
     click.echo(text)
 
 
-def _glyphs():
+def _glyphs() -> dict[str, str]:
     """Tree glyphs the terminal can actually encode.
 
     Windows consoles default to cp1252, which has no box-drawing characters -
@@ -71,7 +90,7 @@ class RetrailGroup(click.Group):
     properly for users and vanished under test, which is exactly backwards.
     """
 
-    def invoke(self, ctx):
+    def invoke(self, ctx: click.Context) -> Any:
         try:
             return super().invoke(ctx)
         except RetrailError as exc:
@@ -86,7 +105,7 @@ class RetrailGroup(click.Group):
 @click.version_option(__version__, "-V", "--version", prog_name="retrail")
 @click.option("--db", default=None, help="Path to the sessions database.")
 @click.pass_context
-def cli(ctx, db):
+def cli(ctx: click.Context, db: str | None) -> None:
     """retrail - git for agent trajectories."""
     ctx.ensure_object(dict)
     ctx.obj["db"] = db or default_db_path()
@@ -94,7 +113,7 @@ def cli(ctx, db):
 
 @cli.command()
 @click.pass_context
-def init(ctx):
+def init(ctx: click.Context) -> None:
     """Create .retrail/ and the sqlite database."""
     path = ctx.obj["db"]
     existed = os.path.exists(path)
@@ -107,7 +126,7 @@ def init(ctx):
 
 @cli.command(name="list")
 @click.pass_context
-def list_sessions(ctx):
+def list_sessions(ctx: click.Context) -> None:
     """List sessions as a tree."""
     with _store(ctx) as store:
         sessions = store.list_sessions()
@@ -115,8 +134,8 @@ def list_sessions(ctx):
             echo("No sessions recorded yet.")
             return
 
-        children = {}
-        roots = []
+        children: dict[str, list[Session]] = {}
+        roots: list[Session] = []
         for s in sessions:
             if s["parent_session_id"]:
                 children.setdefault(s["parent_session_id"], []).append(s)
@@ -125,7 +144,12 @@ def list_sessions(ctx):
 
         g = _glyphs()
 
-        def render(session, prefix="", is_last=True, is_root=False):
+        def render(
+            session: Session,
+            prefix: str = "",
+            is_last: bool = True,
+            is_root: bool = False,
+        ) -> None:
             if is_root:
                 echo(_session_line(store, session))
                 branch_prefix = ""
@@ -141,7 +165,7 @@ def list_sessions(ctx):
             render(root, is_root=True)
 
 
-def _session_line(store, session):
+def _session_line(store: Store, session: Session) -> str:
     own = len(store.steps_for(session["id"]))
     if session["parent_session_id"]:
         # A fork's own steps are only its re-executed suffix. Reporting that as
@@ -160,7 +184,7 @@ def _session_line(store, session):
     return line
 
 
-def _edit_summary(edit_json):
+def _edit_summary(edit_json: str | None) -> str | None:
     """Show WHAT changed, not just where. This is why the patch is stored."""
     if not edit_json:
         return None
@@ -182,7 +206,7 @@ def _edit_summary(edit_json):
 @cli.command()
 @click.argument("session_id")
 @click.pass_context
-def log(ctx, session_id):
+def log(ctx: click.Context, session_id: str) -> None:
     """Step-by-step history of a session, one SHA per step."""
     with _store(ctx) as store:
         session = store.get_session(session_id)
@@ -218,20 +242,23 @@ def log(ctx, session_id):
             echo(f"            {_summarize(step)}")
 
 
-def _summarize(step):
+def _summarize(step: Step | TrajectoryEntry) -> str:
     if step["step_type"] == "model_call":
         messages = step["input"].get("messages", [])
         out = step["output"]
         stop = out.get("stop_reason") if isinstance(out, dict) else None
         content = out.get("content") if isinstance(out, dict) else None
+        # str(), because a content block is model output and need not carry a
+        # 'type' - and a None in here would take down `retrail log` inside
+        # str.join, which is the same failure shape as the encoding bug.
         kinds = (
-            [b.get("type") for b in content if isinstance(b, dict)]
+            [str(b.get("type", "?")) for b in content if isinstance(b, dict)]
             if isinstance(content, list)
             else []
         )
         return f"{len(messages)} messages in -> {stop or '?'} [{', '.join(kinds)}]"
     names = [
-        b.get("name")
+        str(b["name"])
         for b in step["input"]
         if isinstance(b, dict) and b.get("name")
     ] if isinstance(step["input"], list) else []
@@ -241,7 +268,7 @@ def _summarize(step):
 @cli.command()
 @click.argument("sha")
 @click.pass_context
-def show(ctx, sha):
+def show(ctx: click.Context, sha: str) -> None:
     """Full detail on one step, by SHA (prefix ok)."""
     with _store(ctx) as store:
         step = store.get_step(sha)
@@ -258,7 +285,7 @@ def show(ctx, sha):
         echo(_indent(json.dumps(step["output"], indent=2)))
 
 
-def _indent(text, by="  "):
+def _indent(text: str, by: str = "  ") -> str:
     return "\n".join(by + line for line in text.splitlines())
 
 
@@ -279,7 +306,13 @@ def _indent(text, by="  "):
 )
 @click.option("--name", default=None, help="Name for the new forked session.")
 @click.pass_context
-def fork(ctx, sha, agent, edit_file, name):
+def fork(
+    ctx: click.Context,
+    sha: str,
+    agent: str,
+    edit_file: str | None,
+    name: str | None,
+) -> None:
     """Fork from a step SHA and re-execute the agent for real."""
     edit = None
     if edit_file:
@@ -300,14 +333,14 @@ def fork(ctx, sha, agent, edit_file, name):
 @click.argument("session_b")
 @click.option("--full", is_flag=True, help="Show every shared step, not a summary.")
 @click.pass_context
-def diff(ctx, session_a, session_b, full):
+def diff(ctx: click.Context, session_a: str, session_b: str, full: bool) -> None:
     """Compare two trajectories and show where they diverged."""
     with _store(ctx) as store:
         result = diff_sessions(store, session_a, session_b)
         _render_diff(result, full)
 
 
-def _render_diff(result, full):
+def _render_diff(result: DiffResult, full: bool) -> None:
     a, b = result["a"], result["b"]
     echo("comparing")
     echo(f"  A  {a['id']}  {a['session']['name']}  ({len(a['steps'])} steps)")
@@ -368,14 +401,19 @@ def _render_diff(result, full):
     )
 
 
-def _edit_phrase(edit):
+def _edit_phrase(edit: EditProvenance) -> str:
     if edit.get("type") == "callback":
         return (
             f"callback {edit.get('repr', '?')} - effect is recorded, "
             "but the edit itself does not round-trip"
         )
     patch = edit.get("patch")
-    ops = [patch] if isinstance(patch, dict) else (patch or [])
+    if isinstance(patch, dict):
+        ops: list[Any] = [patch]
+    elif isinstance(patch, list):
+        ops = patch
+    else:
+        ops = []
     return ", ".join(
         f"{op.get('op')} {op.get('path')}"
         + (f" = {json.dumps(op['value'])[:60]}" if "value" in op else "")
@@ -383,7 +421,7 @@ def _edit_phrase(edit):
     )
 
 
-def _diff_line(entry):
+def _diff_line(entry: TrajectoryEntry) -> str:
     mark = "*" if entry.get("edited") else " "
     origin = "replayed" if entry["origin"] == "replayed" else "live"
     return (
@@ -415,7 +453,9 @@ def _diff_line(entry):
     "recovered. Trades API calls for confidence against model non-determinism.",
 )
 @click.pass_context
-def bisect(ctx, session_id, check, agent, samples):
+def bisect(
+    ctx: click.Context, session_id: str, check: str, agent: str, samples: int
+) -> None:
     """Find the earliest step from which the agent could no longer recover.
 
     Each probe forks the run and re-executes it for real, so this costs real
@@ -425,7 +465,7 @@ def bisect(ctx, session_id, check, agent, samples):
     with _store(ctx) as store:
         echo(f"bisecting {session_id} against: {check}\n")
 
-        def report(probe):
+        def report(probe: BisectProbe) -> None:
             verdict = "recovered" if probe["passed"] else "still broken"
             echo(
                 f"  probe step {probe['step_number']} ({short(probe['sha'])}): "
@@ -438,13 +478,16 @@ def bisect(ctx, session_id, check, agent, samples):
         _render_bisect(result)
 
 
-def _render_bisect(result):
+def _render_bisect(result: BisectResult) -> None:
     echo(
         f"\n{result['re_executions']} re-execution(s) over "
         f"{len(result['candidates'])} candidate step(s)."
     )
 
-    if result["unreproducible"]:
+    culprit = result["culprit"]
+    # bisect sets `unreproducible` to exactly `culprit is None`; saying so here
+    # makes the invariant checkable instead of merely true.
+    if result["unreproducible"] or culprit is None:
         echo(
             "\nNo culprit: the agent recovered from every step probed, even "
             "though the original run failed. The failure is not reproducible by "
@@ -453,7 +496,6 @@ def _render_bisect(result):
         )
         return
 
-    culprit = result["culprit"]
     if result["inherent"]:
         echo(
             "\nNo single step is to blame: the failure reproduces even when the "
@@ -479,7 +521,7 @@ def _render_bisect(result):
 @click.option("--check", required=True, metavar="EXPR", help="What a good run looks like.")
 @click.option("--agent", required=True, metavar="MODULE:FUNCTION")
 @click.pass_context
-def ablate(ctx, session_id, check, agent):
+def ablate(ctx: click.Context, session_id: str, check: str, agent: str) -> None:
     """Which recorded facts is this run's outcome load-bearing on?
 
     Perturbs each tool result in turn and re-executes for real, then reports
@@ -489,7 +531,7 @@ def ablate(ctx, session_id, check, agent):
     with _store(ctx) as store:
         echo(f"ablating {session_id} against: {check}\n")
 
-        def report(probe):
+        def report(probe: AblateProbe) -> None:
             if probe["error"]:
                 verdict = f"could not probe ({probe['error']})"
             elif probe["flipped"]:
@@ -505,7 +547,7 @@ def ablate(ctx, session_id, check, agent):
         _render_ablate(result)
 
 
-def _render_ablate(result):
+def _render_ablate(result: AblateResult) -> None:
     echo(f"\n{result['re_executions']} re-execution(s).")
     echo(f"baseline: check {'passes' if result['baseline_passed'] else 'fails'}")
 
@@ -551,7 +593,14 @@ def _render_ablate(result):
 @click.option("--check", default=None, metavar="EXPR", help="Optional; finds thresholds.")
 @click.option("--agent", required=True, metavar="MODULE:FUNCTION")
 @click.pass_context
-def sweep(ctx, sha, values_file, path, check, agent):
+def sweep(
+    ctx: click.Context,
+    sha: str,
+    values_file: str,
+    path: str,
+    check: str | None,
+    agent: str,
+) -> None:
     """Substitute N values at one step and compare the outcomes.
 
     Costs one real re-execution per value.
@@ -568,7 +617,7 @@ def sweep(ctx, sha, values_file, path, check, agent):
     with _store(ctx) as store:
         echo(f"sweeping {short(sha)} at {path} over {len(values)} value(s)\n")
 
-        def report(probe):
+        def report(probe: SweepProbe) -> None:
             if probe["error"]:
                 outcome = f"error: {probe['error']}"
             elif probe["passed"] is None:
@@ -583,7 +632,7 @@ def sweep(ctx, sha, values_file, path, check, agent):
         _render_sweep(result)
 
 
-def _render_sweep(result):
+def _render_sweep(result: SweepResult) -> None:
     echo(f"\n{result['re_executions']} re-execution(s).")
     for boundary in result["boundaries"]:
         before, after = boundary["from"], boundary["to"]
@@ -598,7 +647,7 @@ def _render_sweep(result):
 @cli.command()
 @click.argument("session_id")
 @click.pass_context
-def cost(ctx, session_id):
+def cost(ctx: click.Context, session_id: str) -> None:
     """Cost and token breakdown per step."""
     with _store(ctx) as store:
         entries = trajectory(store, session_id)
@@ -645,7 +694,9 @@ def cost(ctx, session_id):
     "that is both cheap and meaningful.",
 )
 @click.pass_context
-def rerun(ctx, check, agent, where, at_tool):
+def rerun(
+    ctx: click.Context, check: str, agent: str, where: str, at_tool: str | None
+) -> None:
     """Re-execute every recorded run against your current code.
 
     Your recorded runs are the regression suite - nobody has to write test
@@ -661,7 +712,7 @@ def rerun(ctx, check, agent, where, at_tool):
             f"  resuming at: {where} forkable step\n"
         )
 
-        def report(result):
+        def report(result: RerunOutcome) -> None:
             marks = {
                 "regressed": "REGRESSED",
                 "fixed": "fixed",
@@ -679,7 +730,7 @@ def rerun(ctx, check, agent, where, at_tool):
         _render_rerun(result)
 
 
-def _render_rerun(result):
+def _render_rerun(result: RerunResult) -> None:
     total = len(result["results"])
     echo(
         f"\n{total} run(s), {result['model_calls']} model call(s)"
@@ -705,7 +756,7 @@ def _render_rerun(result):
         raise SystemExit(1)
 
 
-def _load_agent(spec):
+def _load_agent(spec: str) -> Agent:
     if ":" not in spec:
         raise click.BadParameter(
             f"expected MODULE:FUNCTION, got {spec!r} (e.g. myapp.agent:run_agent)",
@@ -735,7 +786,7 @@ def _load_agent(spec):
     return target
 
 
-def main():
+def main() -> None:
     # RetrailError is handled by RetrailGroup, so it renders identically here
     # and under any other entry point.
     cli(obj={})

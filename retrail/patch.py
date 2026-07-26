@@ -16,18 +16,26 @@ Patch paths are JSON Pointers rooted at the step, so `/output/0/content`
 addresses the first tool result's content.
 """
 
+from __future__ import annotations
+
 import copy
+from collections.abc import Callable
+from typing import Any
 
 from .errors import RetrailError
+from .types import JSON, Edit, EditProvenance, Patch
 
 _MISSING = object()
+
+#: What a normalized edit does: take the step dict, return the edited one.
+EditFn = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class PatchError(RetrailError):
     pass
 
 
-def parse_pointer(pointer):
+def parse_pointer(pointer: str) -> list[str]:
     if pointer in ("", "/"):
         return []
     if not pointer.startswith("/"):
@@ -38,7 +46,7 @@ def parse_pointer(pointer):
     return [p.replace("~1", "/").replace("~0", "~") for p in pointer.split("/")[1:]]
 
 
-def _descend(doc, tokens, pointer):
+def _descend(doc: JSON, tokens: list[str], pointer: str) -> JSON:
     """Walk to the container holding the final token."""
     node = doc
     for i, token in enumerate(tokens[:-1]):
@@ -46,7 +54,7 @@ def _descend(doc, tokens, pointer):
     return node
 
 
-def _child(node, token, so_far, pointer):
+def _child(node: JSON, token: str, so_far: str, pointer: str) -> JSON:
     if isinstance(node, list):
         index = _as_index(token, pointer)
         if index >= len(node):
@@ -67,7 +75,7 @@ def _child(node, token, so_far, pointer):
     )
 
 
-def _as_index(token, pointer):
+def _as_index(token: str, pointer: str) -> int:
     try:
         return int(token)
     except ValueError:
@@ -76,16 +84,16 @@ def _as_index(token, pointer):
         ) from None
 
 
-def apply_patch(doc, patch):
+def apply_patch(doc: JSON, patch: Patch) -> JSON:
     """Apply one op or a list of ops. Returns a new document; never mutates."""
-    ops = [patch] if isinstance(patch, dict) else list(patch)
+    ops: list[Any] = [patch] if isinstance(patch, dict) else list(patch)
     result = copy.deepcopy(doc)
     for op in ops:
         result = _apply_one(result, op)
     return result
 
 
-def _apply_one(doc, op):
+def _apply_one(doc: JSON, op: Any) -> JSON:
     if not isinstance(op, dict):
         raise PatchError(f"each patch op must be an object, got {type(op).__name__}")
     kind = op.get("op")
@@ -146,7 +154,7 @@ def _apply_one(doc, op):
     )
 
 
-def normalize_edit(edit):
+def normalize_edit(edit: Edit) -> tuple[EditFn, EditProvenance | None]:
     """Return (apply_fn, provenance) for either edit shape.
 
     `provenance` is what gets stored on the fork's session row. For a patch

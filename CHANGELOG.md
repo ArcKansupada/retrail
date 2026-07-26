@@ -4,13 +4,20 @@ All notable changes to retrail are documented here. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Until 1.0, the **public API is the names exported from `retrail/__init__.py`**
-plus the CLI. The dict shapes those functions return (step records, session
-records, diff/bisect results) are not yet frozen and may change in a minor
-release; they will be pinned down with typed definitions before 1.0.
+plus the CLI. The dict shapes those functions return are now declared in
+`retrail/types.py`; before 1.0 they may **gain** keys in a minor release, but an
+existing key will not silently change meaning.
 
 ## [Unreleased]
 
 ### Added
+- **Type hints throughout, and a `py.typed` marker.** The package is fully
+  annotated and checked with mypy under `disallow_untyped_defs`. `retrail/types.py`
+  declares every shape the public API returns — `Step`, `Session`,
+  `TrajectoryEntry`, `DiffResult`, `BisectResult`, `AblateResult`, `SweepResult`,
+  `RerunResult`, and the patch/check/agent types — all re-exported from the top
+  level. The records are still plain dicts; a TypedDict is a dict at runtime, so
+  nothing about their behaviour changed.
 - `python -m retrail` as an entry point, matching the `retrail` console script.
 - `retrail --version` (`-V`).
 - Packaging metadata for PyPI: SPDX license, `LICENSE` file, authors, project

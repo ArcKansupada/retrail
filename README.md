@@ -313,6 +313,20 @@ from retrail import record, fork, diff, bisect, ablate, sweep, rerun, trajectory
 
 `trajectory(store, session_id)` materializes the full path from root to tip, walking the parent chain and tagging each step `replayed` or `live`.
 
+### Typed
+
+retrail ships `py.typed`, so the annotations are visible to your type checker rather than collapsing to `Any` at the import boundary. Every function returns a plain dict — they stay JSON-shaped and printable — but the shapes are declared, so a typo in a key is an error and not a `KeyError` at 3am:
+
+```python
+from retrail import Step, DiffResult, TrajectoryEntry, Session   # and the rest
+
+result = diff(store, a, b)
+result["divergance"]   # error: TypedDict "DiffResult" has no key "divergance"
+                       # note:  Did you mean "divergence"?
+```
+
+`@record` preserves your agent's own signature, so your call sites stay checked too.
+
 ## Try it without an API key
 
 The bundled example ships a scripted model, so you can fork, diff, and bisect with no spend. See the **[60-second tour](examples/README.md)**:

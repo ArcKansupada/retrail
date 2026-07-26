@@ -31,15 +31,35 @@ is intervention rather than inference -- and it is only possible because
 forking re-executes for real.
 """
 
+from __future__ import annotations
+
 import itertools
 import json
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, Any, cast
 
-from .bisect import forkable_steps, parse_check
+from .bisect import describe_check, forkable_steps, parse_check
 from .diff import final_answer
 from .errors import RetrailError
 from .fork import fork
 from .pricing import trajectory_cost
 from .trajectory import trajectory
+from .types import (
+    JSON,
+    AblateProbe,
+    AblateResult,
+    Agent,
+    Check,
+    Edit,
+    Patch,
+    Step,
+    SweepBoundary,
+    SweepProbe,
+    SweepResult,
+)
+
+if TYPE_CHECKING:
+    from .storage import Store
 
 # A neutral "this fact was not available" stand-in. Valid JSON, because tool
 # result content is conventionally a JSON string and an agent that parses it
@@ -47,7 +67,18 @@ from .trajectory import trajectory
 UNAVAILABLE = json.dumps({"error": "data unavailable"})
 
 
-def _probe(store, sha, edit, agent, agent_args, agent_kwargs, name, check):
+def _probe(
+    store: Store,
+    sha: str,
+    edit: Edit,
+    agent: Agent,
+    agent_args: Sequence[Any],
+    agent_kwargs: dict[str, Any],
+    name: str,
+    # Not CheckFunction: a check reaching here may be the caller's own plain
+    # callable, which carries no `.expression`. Only the parsed kind does.
+    check: Callable[[str | None], bool] | None,
+) -> dict[str, Any]:
     """Fork once and re-execute. A failure is an outcome, not a crash.
 
     Sweeps and ablations run many probes; one bad probe must not destroy the
@@ -80,7 +111,7 @@ def _probe(store, sha, edit, agent, agent_args, agent_kwargs, name, check):
     }
 
 
-def _default_perturbation(step):
+def _default_perturbation(step: Step) -> Patch:
     """Blank every result this step produced.
 
     One op per result rather than a fixed `/output/0/content`, so a step with
@@ -93,15 +124,15 @@ def _default_perturbation(step):
 
 
 def ablate(
-    store,
-    session_id,
-    check,
-    agent,
-    perturbation=None,
-    agent_args=(),
-    on_probe=None,
-    **agent_kwargs,
-):
+    store: Store,
+    session_id: str,
+    check: Check,
+    agent: Agent,
+    perturbation: Patch | Callable[[Step], Patch] | None = None,
+    agent_args: Sequence[Any] = (),
+    on_probe: Callable[[AblateProbe], None] | None = None,
+    **agent_kwargs: Any,
+) -> AblateResult:
     """Which recorded facts is this run's outcome load-bearing on?
 
     Perturbs each tool_call's output in turn, re-executes, and reports whether
@@ -133,6 +164,7 @@ def ablate(
         )
 
     baseline_trajectory = trajectory(store, session_id)
+    baseline_cost: float | None
     baseline_cost, baseline_unpriced = trajectory_cost(baseline_trajectory)
     if baseline_unpriced:
         # An unknown model prices as None, and summing that as zero would make
@@ -149,16 +181,16 @@ def ablate(
             "can be resumed from."
         )
 
-    probes = []
+    probes: list[AblateProbe] = []
     for step in candidates:
         if perturbation is None:
-            edit = _default_perturbation(step)
+            edit: Patch = _default_perturbation(step)
         elif callable(perturbation):
             edit = perturbation(step)
         else:
             edit = perturbation
 
-        probe = _probe(
+        raw = _probe(
             store,
             step["sha"],
             edit,
@@ -168,7 +200,8 @@ def ablate(
             f"ablate-step-{step['step_number']}",
             check,
         )
-        probe.update(
+        probe = cast(AblateProbe, raw)
+        raw.update(
             {
                 "sha": step["sha"],
                 "step_number": step["step_number"],
@@ -199,7 +232,7 @@ def ablate(
 
     return {
         "session_id": session_id,
-        "check": getattr(check, "expression", getattr(check, "__name__", "<callable>")),
+        "check": describe_check(check),
         "baseline_answer": baseline,
         "baseline_passed": baseline_passed,
         "baseline_cost": baseline_cost,
@@ -221,16 +254,16 @@ def ablate(
 
 
 def sweep(
-    store,
-    from_sha,
-    values,
-    agent,
-    path="/output/0/content",
-    check=None,
-    agent_args=(),
-    on_probe=None,
-    **agent_kwargs,
-):
+    store: Store,
+    from_sha: str,
+    values: Sequence[JSON],
+    agent: Agent,
+    path: str = "/output/0/content",
+    check: Check | None = None,
+    agent_args: Sequence[Any] = (),
+    on_probe: Callable[[SweepProbe], None] | None = None,
+    **agent_kwargs: Any,
+) -> SweepResult:
     """Substitute N values at one step and compare the outcomes.
 
     Finds thresholds: at what fare does it stop booking? `check` is optional --
@@ -244,9 +277,9 @@ def sweep(
 
     step = store.get_step(from_sha)
 
-    probes = []
+    probes: list[SweepProbe] = []
     for index, value in enumerate(values):
-        probe = _probe(
+        raw = _probe(
             store,
             step["sha"],
             {"op": "replace", "path": path, "value": value},
@@ -256,7 +289,8 @@ def sweep(
             f"sweep-{index}",
             check,
         )
-        probe["value"] = value
+        raw["value"] = value
+        probe = cast(SweepProbe, raw)
         probes.append(probe)
         if on_probe:
             on_probe(probe)
@@ -265,24 +299,20 @@ def sweep(
         "sha": step["sha"],
         "step_number": step["step_number"],
         "path": path,
-        "check": (
-            getattr(check, "expression", getattr(check, "__name__", "<callable>"))
-            if check
-            else None
-        ),
+        "check": describe_check(check) if check else None,
         "probes": probes,
         "re_executions": len(probes),
         "boundaries": _boundaries(probes) if check else [],
     }
 
 
-def _boundaries(probes):
+def _boundaries(probes: Sequence[SweepProbe]) -> list[SweepBoundary]:
     """Adjacent value pairs where the check flipped - the thresholds.
 
     Reported in the order the values were given, so a caller sweeping an
     ordered range reads them as the crossing points.
     """
-    out = []
+    out: list[SweepBoundary] = []
     for earlier, later in itertools.pairwise(probes):
         if earlier["passed"] is None or later["passed"] is None:
             continue
