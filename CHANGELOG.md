@@ -11,6 +11,12 @@ existing key will not silently change meaning.
 ## [Unreleased]
 
 ### Added
+- **Schema versioning.** The database now records which schema wrote it
+  (`PRAGMA user_version`), and a file written by a newer retrail is refused at
+  open time with a `SchemaVersionError` naming both versions, instead of being
+  opened and misbehaving later. Databases recorded by 0.1.0 carry no stamp; that
+  layout *is* v1, so they are adopted and labelled rather than rejected. There is
+  a `_migrate` hook for the next bump.
 - **Type hints throughout, and a `py.typed` marker.** The package is fully
   annotated and checked with mypy under `disallow_untyped_defs`. `retrail/types.py`
   declares every shape the public API returns — `Step`, `Session`,

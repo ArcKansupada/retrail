@@ -529,3 +529,24 @@ def test_public_types_are_importable_from_the_top_level():
     assert "origin" in TrajectoryEntry.__annotations__
     assert "parent_session_id" in Session.__annotations__
     assert "divergence" in DiffResult.__annotations__
+
+
+def test_a_newer_database_is_refused_as_a_message_not_a_traceback(env):
+    """The refusal has to be legible, or it just looks like retrail crashed."""
+    import sqlite3
+
+    from retrail.storage import SCHEMA_VERSION
+
+    run, db, tmp_path = env
+    run("init")
+
+    conn = sqlite3.connect(db)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    conn.commit()
+    conn.close()
+
+    result = run("list", expect_ok=False)
+    assert result.exit_code == 1
+    assert result.output.startswith("error: ")
+    assert "newer retrail" in result.output
+    assert "Traceback" not in result.output

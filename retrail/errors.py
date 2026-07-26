@@ -38,3 +38,32 @@ class ReplayIntegrityError(RetrailError):
 
 class IntegrationError(RetrailError):
     """The user's agent function doesn't meet the integration contract."""
+
+
+class SchemaVersionError(RetrailError):
+    """The database on disk was written by a different retrail schema.
+
+    Refusing is the point. SQLite will happily open a database whose tables
+    don't match what the code expects, and the failure then arrives later as a
+    missing column or a silently absent row - long after the command that
+    caused it. A trace you cannot trust is worse than one you cannot open.
+    """
+
+    def __init__(self, path: str, found: int, expected: int) -> None:
+        self.path = path
+        self.found = found
+        self.expected = expected
+        if found > expected:
+            detail = (
+                f"was written by a newer retrail (schema v{found}); this "
+                f"retrail understands v{expected}. Upgrade with "
+                "`pip install -U retrail`, or point at a different database "
+                "with --db."
+            )
+        else:
+            detail = (
+                f"uses schema v{found}, and this retrail (v{expected}) has no "
+                "migration for it. This is a bug: every version retrail has "
+                "shipped should be readable."
+            )
+        super().__init__(f"{path} {detail}")

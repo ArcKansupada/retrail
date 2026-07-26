@@ -1,8 +1,17 @@
+import sqlite3
+
 import pytest
 
-from retrail.errors import AmbiguousSha, NotFound, ReplayIntegrityError
+from retrail.errors import (
+    AmbiguousSha,
+    NotFound,
+    ReplayIntegrityError,
+    RetrailError,
+    SchemaVersionError,
+)
 from retrail.serialize import canonical_json, to_jsonable
 from retrail.sha import compute_sha
+from retrail.storage import SCHEMA_VERSION, Store
 
 
 def test_sha_is_stable_across_dict_ordering():
@@ -110,3 +119,107 @@ def test_fork_is_a_new_row_not_a_mutation(store):
     assert store.get_session(parent)["parent_session_id"] is None
     assert store.get_session(child)["parent_sha"] == sha
     assert len(store.list_sessions()) == 2
+
+
+# -- schema versioning --------------------------------------------------------
+#
+# `CREATE TABLE IF NOT EXISTS` accepts a database written by any other version
+# of retrail and then misbehaves somewhere else, later. These tests pin the
+# behaviour that replaces that: the file states which schema wrote it, and a
+# version this code cannot read is refused at open time.
+
+
+def _user_version(path):
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_a_new_database_is_stamped_with_the_schema_version(tmp_path):
+    path = str(tmp_path / "new.db")
+    Store(path).close()
+    assert _user_version(path) == SCHEMA_VERSION
+
+
+def test_reopening_keeps_the_stamp_and_the_data(tmp_path):
+    path = str(tmp_path / "reopen.db")
+    with Store(path) as store:
+        session_id = store.create_session(name="first")
+
+    with Store(path) as store:
+        assert store.get_session(session_id)["name"] == "first"
+    assert _user_version(path) == SCHEMA_VERSION
+
+
+def test_a_newer_schema_is_refused_rather_than_opened(tmp_path):
+    path = str(tmp_path / "future.db")
+    Store(path).close()
+
+    conn = sqlite3.connect(path)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 1}")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(SchemaVersionError) as excinfo:
+        Store(path)
+
+    message = str(excinfo.value)
+    assert "newer retrail" in message
+    assert f"v{SCHEMA_VERSION + 1}" in message
+    assert "pip install -U retrail" in message
+
+
+def test_refusing_a_newer_schema_does_not_leave_the_file_locked(tmp_path):
+    """A failed open must close its connection.
+
+    On Windows an orphaned handle keeps the file locked, so the next attempt
+    fails for a second, unrelated-looking reason and the real error is buried.
+    """
+    path = str(tmp_path / "locked.db")
+    Store(path).close()
+    conn = sqlite3.connect(path)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION + 5}")
+    conn.commit()
+    conn.close()
+
+    for _ in range(3):
+        with pytest.raises(SchemaVersionError):
+            Store(path)
+
+    # Still readable and writable by anyone else, i.e. nothing was left open.
+    conn = sqlite3.connect(path)
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.commit()
+    conn.close()
+    Store(path).close()
+
+
+def test_a_pre_versioning_database_is_adopted_not_refused(tmp_path):
+    """retrail 0.1.0 wrote v1 tables with no stamp. That layout IS v1.
+
+    Refusing these would mean refusing every trace recorded before the marker
+    existed, which is the opposite of the point.
+    """
+    path = str(tmp_path / "legacy.db")
+    with Store(path) as store:
+        session_id = store.create_session(name="recorded-before-versioning")
+        store.add_step(session_id, 0, "model_call", {"messages": []}, {"ok": True})
+
+    # Reproduce a 0.1.0 file: correct tables, no stamp.
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA user_version = 0")
+    conn.commit()
+    conn.close()
+    assert _user_version(path) == 0
+
+    with Store(path) as store:
+        assert store.get_session(session_id)["name"] == "recorded-before-versioning"
+        assert len(store.steps_for(session_id)) == 1
+    assert _user_version(path) == SCHEMA_VERSION
+
+
+def test_schema_version_error_is_a_retrail_error(tmp_path):
+    """So the CLI renders it as a message rather than a traceback."""
+    assert issubclass(SchemaVersionError, RetrailError)

@@ -13,12 +13,21 @@ import time
 import uuid
 from typing import Any, cast
 
-from .errors import AmbiguousSha, NotFound
+from .errors import AmbiguousSha, NotFound, SchemaVersionError
 from .sha import compute_sha
 from .types import JSON, EditProvenance, Session, SessionStatus, Step, StepType
 
 DEFAULT_DIR = ".retrail"
 DB_NAME = "sessions.db"
+
+#: Bump when the tables change, and add a migration in `_migrate` for every
+#: version that has ever shipped. Stored in the file itself via
+#: `PRAGMA user_version`, so a database always states which schema wrote it.
+#:
+#: v1: the original layout - sessions, steps, and their indexes. It was written
+#:     before the marker existed, so v0 with tables present means v1 too; see
+#:     `_apply_schema`.
+SCHEMA_VERSION = 1
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -59,6 +68,67 @@ def default_db_path(root: str | None = None) -> str:
     return os.path.join(root or os.getcwd(), DEFAULT_DIR, DB_NAME)
 
 
+def schema_version(conn: sqlite3.Connection) -> int:
+    """The schema version stamped into the file itself."""
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _apply_schema(conn: sqlite3.Connection, path: str) -> None:
+    """Bring a database up to SCHEMA_VERSION, or refuse to touch it.
+
+    `CREATE TABLE IF NOT EXISTS` on its own is not version handling: it accepts
+    a file written by any other version of retrail without complaint and then
+    misbehaves later, somewhere else. The stamp turns that into one clear error
+    at the point of opening.
+    """
+    found = schema_version(conn)
+    initialized = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sessions'"
+        ).fetchone()
+        is not None
+    )
+
+    if found > SCHEMA_VERSION:
+        # Newer retrail wrote this. Its tables may have columns this code will
+        # never read, and writing to it could produce rows that version cannot
+        # read back. Refuse rather than corrupt someone's trace.
+        raise SchemaVersionError(path, found, SCHEMA_VERSION)
+
+    if initialized and found == 0:
+        # Written by retrail 0.1.0, before the marker existed. That layout IS
+        # v1 - nothing needs rewriting, only labelling. Adopting it silently is
+        # right here and only here: the alternative is refusing every database
+        # recorded before this feature landed.
+        _stamp(conn, SCHEMA_VERSION)
+        return
+
+    if initialized and found < SCHEMA_VERSION:
+        _migrate(conn, path, found)
+        return
+
+    conn.executescript(SCHEMA)
+    _stamp(conn, SCHEMA_VERSION)
+
+
+def _migrate(conn: sqlite3.Connection, path: str, found: int) -> None:
+    """Upgrade an older database in place.
+
+    Empty by construction at v1 - there is no older shipped schema to come
+    from. It exists so the next bump has one obvious place to go, and so an
+    unmigratable version fails loudly instead of falling through to the
+    `CREATE TABLE IF NOT EXISTS` path and looking like it worked.
+    """
+    raise SchemaVersionError(path, found, SCHEMA_VERSION)
+
+
+def _stamp(conn: sqlite3.Connection, version: int) -> None:
+    # PRAGMA does not take bound parameters, so this is interpolated. `version`
+    # is an int constant from this module, never user input.
+    conn.execute(f"PRAGMA user_version = {int(version)}")
+    conn.commit()
+
+
 class Store:
     path: str
     conn: sqlite3.Connection
@@ -82,8 +152,14 @@ class Store:
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA synchronous = NORMAL")
 
-        self.conn.executescript(SCHEMA)
-        self.conn.commit()
+        try:
+            _apply_schema(self.conn, self.path)
+        except BaseException:
+            # A Store that failed to open must not leave its connection behind.
+            # On Windows an orphaned handle keeps the file locked, so the next
+            # attempt fails for a second, unrelated-looking reason.
+            self.conn.close()
+            raise
 
     def close(self) -> None:
         self.conn.close()

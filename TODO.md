@@ -71,10 +71,13 @@ Still needs you:
       one above it, and running your agent from a different working directory records
       into a different database than the CLI reads. Walk parents for `.retrail/`, and
       honour a `RETRAIL_DB` environment variable.
-- [ ] **Schema versioning.** The schema is applied with `CREATE TABLE IF NOT EXISTS`,
-      so a database written by a future retrail opens happily and then misbehaves. Set
-      `PRAGMA user_version`, refuse a newer db with a clear message, and leave room for
-      migrations. Do this *before* release — after release it's a compatibility break.
+- [x] **Schema versioning.** *(done 2026-07-26)* `SCHEMA_VERSION` stamped into the
+      file via `PRAGMA user_version`; a newer database raises `SchemaVersionError`
+      naming both versions and pointing at `pip install -U retrail`. Pre-versioning
+      0.1.0 databases are adopted, since that layout is v1 — refusing them would have
+      meant refusing every trace recorded before the marker existed. `_migrate` is
+      the hook for the next bump. A failed open closes its connection, so a refusal
+      does not leave the file locked on Windows.
 - [ ] **Decide the thread-safety story and enforce it.** `sqlite3.connect()` defaults
       to `check_same_thread=True`, and `record._default_stores` is a shared module-level
       dict. An agent that fans tool calls out to a thread pool, or a web app recording

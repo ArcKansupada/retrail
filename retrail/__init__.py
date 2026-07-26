@@ -12,6 +12,7 @@ from .errors import (
     NotFound,
     ReplayIntegrityError,
     RetrailError,
+    SchemaVersionError,
 )
 from .explore import ablate, sweep
 from .fork import fork
@@ -78,6 +79,7 @@ __all__ = [
     "AmbiguousSha",
     "ReplayIntegrityError",
     "IntegrationError",
+    "SchemaVersionError",
     # types
     "JSON",
     "AblateProbe",
