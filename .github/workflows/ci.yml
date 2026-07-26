@@ -32,9 +32,9 @@ jobs:
           - { os: macos-latest, python: "3.13" }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
 
@@ -60,8 +60,8 @@ jobs:
     name: windows / cp1252 console
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
@@ -79,8 +79,8 @@ jobs:
     name: ruff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: python -m pip install --upgrade pip && python -m pip install ruff
@@ -93,8 +93,8 @@ jobs:
     name: mypy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           # The floor, not the ceiling: annotations that only resolve on a newer
           # runtime are exactly the breakage py.typed would export to users.
@@ -106,8 +106,8 @@ jobs:
     name: build + metadata check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: python -m pip install --upgrade pip && python -m pip install build twine
@@ -115,7 +115,7 @@ jobs:
       # Catches a README that renders on GitHub but not on PyPI, which is only
       # otherwise discoverable by publishing a bad release.
       - run: python -m twine check --strict dist/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/

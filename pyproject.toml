@@ -45,10 +45,10 @@ dependencies = ["click>=8.0"]
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/arckansupada/retrail"
-Repository = "https://github.com/arckansupada/retrail"
-Issues = "https://github.com/arckansupada/retrail/issues"
-Changelog = "https://github.com/arckansupada/retrail/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/ArcKansupada/retrail"
+Repository = "https://github.com/ArcKansupada/retrail"
+Issues = "https://github.com/ArcKansupada/retrail/issues"
+Changelog = "https://github.com/ArcKansupada/retrail/blob/main/CHANGELOG.md"
 
 [project.scripts]
 retrail = "retrail.cli:main"
