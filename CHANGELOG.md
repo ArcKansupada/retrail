@@ -45,6 +45,20 @@ existing key will not silently change meaning.
   duplicate in `pyproject.toml` is gone.
 
 ### Fixed
+- **A `Store` can be shared between threads.** Recording two runs at once — a
+  web service, a harness evaluating prompts in parallel — used to fail as a raw
+  `sqlite3.ProgrammingError` several frames deep, because the connection refused
+  cross-thread use. Every method now holds a reentrant lock spanning the
+  statement *and* its commit, so `check_same_thread=False` is safe. Three
+  narrower races went with it: the process-wide store cache was a check-then-set
+  that opened one connection per thread and orphaned all but one (measured: 8
+  threads, 8 connections, 7 leaked); `fork()`'s handoff to the decorator was a
+  module-level dict, so two concurrent forks could record one agent's steps
+  under the other's session; and step numbers were read in one statement and
+  written in another, which two writers on one session lose to a `UNIQUE`
+  violation. `Store.add_step` now accepts `step_number=None` and allocates
+  inside the lock — pass None unless you are reconstructing a specific
+  numbering.
 - **An async agent is refused instead of mis-recorded.** `@record` on an
   `async def` raised only by accident and only sometimes: calling the function
   returns a coroutine without running the body, so the session was stamped

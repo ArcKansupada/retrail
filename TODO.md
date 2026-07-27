@@ -80,12 +80,19 @@ Still needs you:
       meant refusing every trace recorded before the marker existed. `_migrate` is
       the hook for the next bump. A failed open closes its connection, so a refusal
       does not leave the file locked on Windows.
-- [ ] **Decide the thread-safety story and enforce it.** `sqlite3.connect()` defaults
-      to `check_same_thread=True`, and `record._default_stores` is a shared module-level
-      dict. An agent that fans tool calls out to a thread pool, or a web app recording
-      two runs concurrently, will hit a raw sqlite error several frames deep. Either
-      make connections thread-local, or detect the cross-thread case and raise a real
-      `IntegrationError` explaining the boundary.
+- [x] **Thread safety.** *(done 2026-07-26)* Chose "make it work" over "refuse it":
+      sharing one store across threads is a legitimate thing to want, so an
+      `IntegrationError` would have been rejecting a reasonable pattern. `Store` holds
+      an `RLock` across each statement *and* its commit — spanning the commit matters,
+      since one connection carries one implicit transaction and interleaved writers
+      would otherwise decide each other's fate — which is what makes
+      `check_same_thread=False` safe. Probing first turned up three races the note
+      above missed: the `_default_stores` check-then-set (8 threads → 8 connections,
+      7 orphaned, callers holding uncached twins), `_pending` as a module dict letting
+      concurrent forks cross-assign sessions, and read-then-write step numbering.
+      9 tests. One of them passed against the broken code until a delay was added to
+      widen the window — worth remembering that a concurrency test proves nothing
+      until you have watched it fail.
 - [x] **Refuse async agent loops.** *(done 2026-07-26)* Raised at decoration time for
       an `async def` agent, and at call time for an async `call_model` /
       `execute_tools`, including a class with an `async def __call__` — which

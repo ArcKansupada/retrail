@@ -13,6 +13,7 @@ from __future__ import annotations
 import copy
 import functools
 import inspect
+import threading
 import time
 from collections.abc import Callable
 from typing import Any, ParamSpec, TypeVar
@@ -43,13 +44,44 @@ def _is_async(obj: object) -> bool:
     # `callable()` answers a different question and would miss this entirely.
     return inspect.iscoroutinefunction(type(obj).__call__)
 
+class _Pending(threading.local):
+    """Handoff from fork() to the decorator, per thread.
+
+    Dict-shaped because that is how fork() uses it, but thread-local because
+    the value is a *destination*: it says which session the very next recorded
+    run belongs to. A plain module dict makes that a race with a silent wrong
+    answer - two concurrent forks, and the second overwrites the first, so one
+    agent's steps are recorded into the other fork's session. Wrong provenance
+    is worse than a crash here: the trace looks fine and describes a run that
+    never happened. `threading.local` makes it structurally impossible, since
+    fork() sets it and the agent it calls consumes it on the same thread.
+    """
+
+    def __init__(self) -> None:
+        self._values: dict[str, Any] = {}
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._values[key] = value
+
+    def pop(self, key: str, default: Any = None) -> Any:
+        return self._values.pop(key, default)
+
+
 # Set by fork() so a re-executed run records into the fork's session (with its
 # parent provenance) instead of minting a fresh root session.
-_pending: dict[str, Any] = {}
+_pending = _Pending()
 
-# One connection per database per process. Without this, every recorded run
-# opens a new sqlite connection and never closes it.
+# One Store per database per process, shared across threads - Store itself is
+# thread-safe. Without this, every recorded run opens a new sqlite connection
+# and never closes it.
 _default_stores: dict[str, Store] = {}
+
+# Guards the cache, not the stores. `if path not in cache: cache[path] = Store()`
+# is two operations: every thread can pass the test, every thread opens a
+# connection, and each gets back whichever object happened to land in the dict
+# last. Measured with 8 threads: 8 connections opened, 7 orphaned, and callers
+# holding stores that are not the cached one.
+_stores_lock = threading.Lock()
 
 
 def _default_store() -> Store:
@@ -58,9 +90,11 @@ def _default_store() -> Store:
     # Searches upward, so an agent launched from a subdirectory of the project
     # records into the project's store - the same one the CLI will find.
     path = resolve_db_path()
-    if path not in _default_stores:
-        _default_stores[path] = Store(path)
-    return _default_stores[path]
+    with _stores_lock:
+        store = _default_stores.get(path)
+        if store is None:
+            store = _default_stores[path] = Store(path)
+        return store
 
 
 def record(
@@ -199,8 +233,8 @@ class _Recorder:
         self.store = store
         self.session_id = session_id
 
-    def _next(self) -> int:
-        return self.store.next_step_number(self.session_id)
+        # Step numbers are allocated by add_step(None, ...) inside the store's
+        # lock, rather than read here and passed in - see Store.add_step.
 
     def wrap_model(self, call_model: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(call_model)
@@ -219,7 +253,7 @@ class _Recorder:
             tokens, cost = _usage(serialized)
             self.store.add_step(
                 self.session_id,
-                self._next(),
+                None,
                 "model_call",
                 {"messages": snapshot, "extra": to_jsonable(list(args))},
                 serialized,
@@ -240,7 +274,7 @@ class _Recorder:
 
             self.store.add_step(
                 self.session_id,
-                self._next(),
+                None,
                 "tool_call",
                 _tool_uses(to_jsonable(response)),
                 to_jsonable(results),

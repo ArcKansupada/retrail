@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 import uuid
 from typing import Any, cast
@@ -178,13 +179,31 @@ def _stamp(conn: sqlite3.Connection, version: int) -> None:
 
 
 class Store:
+    """A connection to one database. Safe to share between threads.
+
+    Sharing is the point: a web app recording two runs at once, or an agent
+    that fans work out to a pool, gets one store rather than one per thread.
+    sqlite3 refuses cross-thread use by default, so that pattern previously
+    failed as a raw `ProgrammingError` several frames deep - a legitimate thing
+    to do, rejected for a reason the traceback never explained.
+
+    Every method that touches the connection holds `_lock`, which is what makes
+    `check_same_thread=False` safe here. The lock spans each statement *and its
+    commit*, not just the statement: the connection carries one implicit
+    transaction, so two interleaved writers would otherwise land inside each
+    other's, and one thread's commit would decide the fate of another's rows.
+    """
+
     path: str
     conn: sqlite3.Connection
 
     def __init__(self, path: str | None = None) -> None:
         self.path = path or default_db_path()
         os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        # Reentrant: get_step() takes the lock and then calls resolve_sha(),
+        # which takes it again.
+        self._lock = threading.RLock()
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
 
@@ -210,7 +229,8 @@ class Store:
             raise
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def __enter__(self) -> Store:
         return self
@@ -230,42 +250,46 @@ class Store:
         status: SessionStatus = "running",
     ) -> str:
         session_id = "s_" + uuid.uuid4().hex[:10]
-        self.conn.execute(
-            "INSERT INTO sessions (id, name, parent_session_id, parent_sha, "
-            "forked_at_step, edit_json, created_at, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                session_id,
-                name,
-                parent_session_id,
-                parent_sha,
-                forked_at_step,
-                json.dumps(edit) if edit is not None else None,
-                time.time(),
-                status,
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "INSERT INTO sessions (id, name, parent_session_id, parent_sha, "
+                "forked_at_step, edit_json, created_at, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    name,
+                    parent_session_id,
+                    parent_sha,
+                    forked_at_step,
+                    json.dumps(edit) if edit is not None else None,
+                    time.time(),
+                    status,
+                ),
+            )
+            self.conn.commit()
         return session_id
 
     def set_status(self, session_id: str, status: SessionStatus) -> None:
-        self.conn.execute(
-            "UPDATE sessions SET status = ? WHERE id = ?", (status, session_id)
-        )
-        self.conn.commit()
+        with self._lock:
+            self.conn.execute(
+                "UPDATE sessions SET status = ? WHERE id = ?", (status, session_id)
+            )
+            self.conn.commit()
 
     def get_session(self, session_id: str) -> Session:
-        row = self.conn.execute(
-            "SELECT * FROM sessions WHERE id = ?", (session_id,)
-        ).fetchone()
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
         if row is None:
             raise NotFound(f"no session {session_id!r}")
         return cast(Session, dict(row))
 
     def list_sessions(self) -> list[Session]:
-        rows = self.conn.execute(
-            "SELECT * FROM sessions ORDER BY created_at ASC"
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT * FROM sessions ORDER BY created_at ASC"
+            ).fetchall()
         return [cast(Session, dict(r)) for r in rows]
 
     # -- steps ------------------------------------------------------------
@@ -273,7 +297,7 @@ class Store:
     def add_step(
         self,
         session_id: str,
-        step_number: int,
+        step_number: int | None,
         step_type: StepType,
         input_obj: JSON,
         output_obj: JSON,
@@ -281,37 +305,55 @@ class Store:
         cost_usd: float | None = None,
         duration_ms: float | None = None,
     ) -> str:
+        """Append a step. `step_number=None` allocates the next one atomically.
+
+        Pass None unless you are reconstructing a specific numbering. Asking
+        for the number and then inserting it are two statements, and between
+        them another thread recording into the same session can take it - the
+        loser hits the UNIQUE(session_id, step_number) constraint. Allocating
+        inside the lock closes that window; `next_step_number` on its own
+        cannot.
+        """
         from .serialize import canonical_json
 
-        sha = compute_sha(session_id, step_number, step_type, input_obj, output_obj)
-        self.conn.execute(
-            "INSERT INTO steps (sha, session_id, step_number, step_type, "
-            "input_json, output_json, tokens_used, cost_usd, duration_ms, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                sha,
-                session_id,
-                step_number,
-                step_type,
-                canonical_json(input_obj),
-                canonical_json(output_obj),
-                tokens_used,
-                cost_usd,
-                duration_ms,
-                time.time(),
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            if step_number is None:
+                step_number = self._next_step_number(session_id)
+            sha = compute_sha(session_id, step_number, step_type, input_obj, output_obj)
+            self.conn.execute(
+                "INSERT INTO steps (sha, session_id, step_number, step_type, "
+                "input_json, output_json, tokens_used, cost_usd, duration_ms, "
+                "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    sha,
+                    session_id,
+                    step_number,
+                    step_type,
+                    canonical_json(input_obj),
+                    canonical_json(output_obj),
+                    tokens_used,
+                    cost_usd,
+                    duration_ms,
+                    time.time(),
+                ),
+            )
+            self.conn.commit()
         return sha
 
     def steps_for(self, session_id: str) -> list[Step]:
-        rows = self.conn.execute(
-            "SELECT * FROM steps WHERE session_id = ? ORDER BY step_number ASC",
-            (session_id,),
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT * FROM steps WHERE session_id = ? ORDER BY step_number ASC",
+                (session_id,),
+            ).fetchall()
         return [_step(r) for r in rows]
 
     def next_step_number(self, session_id: str) -> int:
+        """The number the next step would get. Advisory only - see `add_step`."""
+        with self._lock:
+            return self._next_step_number(session_id)
+
+    def _next_step_number(self, session_id: str) -> int:
         row = self.conn.execute(
             "SELECT MAX(step_number) AS n FROM steps WHERE session_id = ?",
             (session_id,),
@@ -323,9 +365,10 @@ class Store:
         prefix = prefix.strip().lower()
         if not prefix:
             raise NotFound("empty SHA")
-        rows = self.conn.execute(
-            "SELECT sha FROM steps WHERE sha LIKE ? || '%'", (prefix,)
-        ).fetchall()
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT sha FROM steps WHERE sha LIKE ? || '%'", (prefix,)
+            ).fetchall()
         if not rows:
             raise NotFound(f"no step matching SHA {prefix!r}")
         if len(rows) > 1:
@@ -333,8 +376,11 @@ class Store:
         return rows[0]["sha"]
 
     def get_step(self, sha_or_prefix: str) -> Step:
-        sha = self.resolve_sha(sha_or_prefix)
-        row = self.conn.execute("SELECT * FROM steps WHERE sha = ?", (sha,)).fetchone()
+        with self._lock:
+            sha = self.resolve_sha(sha_or_prefix)
+            row = self.conn.execute(
+                "SELECT * FROM steps WHERE sha = ?", (sha,)
+            ).fetchone()
         return _step(row)
 
 
