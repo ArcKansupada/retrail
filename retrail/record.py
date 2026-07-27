@@ -26,6 +26,23 @@ from .types import JSON
 P = ParamSpec("P")
 R = TypeVar("R")
 
+
+def _is_async(obj: object) -> bool:
+    """True for anything that returns a coroutine when called.
+
+    `iscoroutinefunction` already sees through `functools.partial`, but not
+    through a class with an `async def __call__` - a shape real SDK clients do
+    use. Checking both keeps the refusal honest rather than merely typical.
+    """
+    if inspect.iscoroutinefunction(obj):
+        return True
+    if not callable(obj) or inspect.isroutine(obj):
+        return False
+    # Being callable is exactly what guarantees type(obj).__call__ exists, so
+    # this cannot raise. It is the object's own __call__ we need to inspect -
+    # `callable()` answers a different question and would miss this entirely.
+    return inspect.iscoroutinefunction(type(obj).__call__)
+
 # Set by fork() so a re-executed run records into the fork's session (with its
 # parent provenance) instead of minting a fresh root session.
 _pending: dict[str, Any] = {}
@@ -75,6 +92,28 @@ def record(
     """
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
+        # Refuse async at decoration time, so the error arrives when the module
+        # is imported rather than after a run that appeared to work.
+        #
+        # A sync wrapper around an `async def` does not record it - calling the
+        # function only builds a coroutine, so `fn(...)` returns before the body
+        # has executed a single step. The session is stamped `complete`
+        # immediately, and the `except BaseException` that marks a crashed run
+        # `failed` never sees anything, because the body runs later inside the
+        # event loop. A run that raised partway through is stored as a
+        # successful one. That is the worst failure this project can have: not a
+        # crash, but a recording that quietly disagrees with what happened.
+        if _is_async(fn):
+            raise IntegrationError(
+                f"@record cannot record {getattr(fn, '__name__', fn)!r} because it is "
+                "an async function, and retrail does not support async agents yet. "
+                "Calling an async function returns a coroutine without running its "
+                "body, so retrail would mark the session complete before your loop "
+                "had taken a step - and a run that later failed would be recorded as "
+                "a successful one. Wrap the loop in a synchronous function (for "
+                "example, one that calls asyncio.run) and decorate that instead."
+            )
+
         signature = inspect.signature(fn)
         for name in (messages_arg, model_arg, tools_arg):
             if name not in signature.parameters:
@@ -108,6 +147,20 @@ def record(
                         "Give it a real function as its default and do any lazy "
                         "setup (client construction, auth) on first call inside "
                         "that function."
+                    )
+                # An async call_model or execute_tools inside a sync agent fails
+                # too, just further away: the wrapper never awaits it, so what
+                # gets recorded is a coroutine object, and the complaint arrives
+                # from the serializer as "cannot serialize coroutine" - true, but
+                # silent about the actual cause. Name it here instead.
+                if _is_async(bound.arguments[name]):
+                    raise IntegrationError(
+                        f"{fn.__name__}() got an async {name}, which retrail cannot "
+                        "record yet. retrail calls it and records what comes back; "
+                        "for a coroutine function that is an un-awaited coroutine, "
+                        "not the model's response. Give retrail a synchronous "
+                        f"{name} (for example one that calls asyncio.run internally) "
+                        "so there is a real response to record."
                     )
 
             ctx = _pending.pop("session", None)

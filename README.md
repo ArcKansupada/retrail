@@ -24,7 +24,7 @@ Early but complete end to end: record, fork, diff, and bisect all work, and all 
 **Fastest way in:** the [60-second tour](examples/README.md) — a toy booking agent you can fork, diff, and bisect with **no API key**.
 
 ```bash
-pytest              # 182 offline tests, deterministic and free
+pytest              # 221 offline tests, deterministic and free
 pytest -m live      # 8 tests against the real API (costs ~$0.30)
 ```
 
@@ -56,6 +56,8 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
 Give the other parameters defaults if you want to fork from the CLI — that's what lets `retrail fork` call your agent with just the seeded history.
 
 Then run it as usual. Steps are logged as the loop runs; there is no export step.
+
+**The loop must be synchronous.** `@record` refuses an `async def` agent, and refuses an async `call_model` or `execute_tools`, with an error explaining why rather than recording something untrue: calling an async function returns a coroutine without running its body, so retrail would mark the session complete before your loop had taken a step, and a run that later failed would be stored as a successful one. If your loop is async today, wrap it in a synchronous function that calls `asyncio.run` and decorate that. An async-aware recorder is planned.
 
 ## Fork
 
@@ -284,6 +286,8 @@ The whole product rests on the replay being exactly what happened, so retrail ra
 - If your loop **transforms a tool result** before appending it to the history, retrail refuses to fork that step — its patch would land on a value you never saw.
 - If an edit **invents or drops** a tool result the original run never produced, it refuses — there's no honest place in the recorded history to put it.
 - If a run **crashed mid-loop**, its trailing tool call can't be forked: the message state after it was never observed.
+- If your agent or its model call is **async**, it refuses to record at all rather than stamp a session `complete` before the loop has run a step.
+- If the database was written by a **newer retrail**, it refuses to open it rather than write rows that version may not read back.
 
 A wrong replay would be worse than no replay.
 

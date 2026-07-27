@@ -45,6 +45,17 @@ existing key will not silently change meaning.
   duplicate in `pyproject.toml` is gone.
 
 ### Fixed
+- **An async agent is refused instead of mis-recorded.** `@record` on an
+  `async def` raised only by accident and only sometimes: calling the function
+  returns a coroutine without running the body, so the session was stamped
+  `complete` before the loop had taken a step, and the handler that marks a
+  crashed run `failed` never saw the failure — it happened later, inside the
+  event loop. An async agent that raised partway through was stored as a
+  successful run. It is now an `IntegrationError` at decoration time, so the
+  problem surfaces on import rather than after a run that looked fine. An async
+  `call_model` or `execute_tools` inside a *sync* agent is refused at call time
+  for the same reason; it previously failed further away, as "cannot serialize
+  coroutine" from the serializer.
 - **A run recorded from a subdirectory is no longer invisible.** `.retrail/` was
   resolved against the current working directory and nothing else, so `retrail
   log` one level down created a fresh database and truthfully reported no

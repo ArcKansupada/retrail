@@ -86,13 +86,20 @@ Still needs you:
       two runs concurrently, will hit a raw sqlite error several frames deep. Either
       make connections thread-local, or detect the cross-thread case and raise a real
       `IntegrationError` explaining the boundary.
-- [ ] **Async agent loops.** Deferred in v1 (design doc §11) — but the current failure
-      mode is silent corruption, not a refusal: `@record` on an `async def` times
-      coroutine *construction*, serializes a coroutine object as the "response", and
-      marks the session `complete` before the loop has executed a single step. Minimum
-      bar for release: detect `inspect.iscoroutinefunction` on the agent, `call_model`,
-      or `execute_tools` and raise. Real fix: an async-aware recorder. This is the
-      most-likely-requested feature from anyone with a production loop.
+- [x] **Refuse async agent loops.** *(done 2026-07-26)* Raised at decoration time for
+      an `async def` agent, and at call time for an async `call_model` /
+      `execute_tools`, including a class with an `async def __call__` — which
+      `iscoroutinefunction` alone does not catch. Measured before writing anything,
+      and the note above was half wrong: an async *model call* did raise, as "cannot
+      serialize coroutine" from the serializer — true but silent about the cause. The
+      genuinely silent case was an async agent with a **sync** model call, where the
+      session is stamped `complete` before the body runs, so a run that raised partway
+      through was stored as successful. 8 tests; 6 fail without the guard.
+- [ ] **Async agent loops, actually supported.** Deferred in v1 (design doc §11). The
+      refusal above is the release bar, not the feature: an async-aware recorder still
+      needs `wrap_model`/`wrap_tools` to await, and the wrapper to be a coroutine
+      function whose `except BaseException` wraps the awaited body. Most-likely
+      request from anyone with a production loop.
 - [ ] **Close connections.** `_default_stores` entries are opened and never closed —
       no `atexit` hook, no public way to reset. Add cleanup plus a public
       `retrail.use_store(...)` / `set_default_store(...)` so applications and test
@@ -203,6 +210,6 @@ Three things mypy found that were latent, not stylistic. All fixed:
 1. ~~`git init` + LICENSE + metadata + CI~~ — **done**, minus pushing to GitHub.
 2. ~~Type hints + `py.typed`~~ — **done.**
 3. ~~Store discovery walks up to find `.retrail/`~~ — **done.**
-4. Raise on async agents *(silent corruption today)*
+4. ~~Raise on async agents~~ — **done.**
 5. `retrail export` / `import` *(the sharable-repro feature, cheap to build)*
 6. `prune` + hiding probe sessions *(the store becomes unreadable within a day of real use)*
