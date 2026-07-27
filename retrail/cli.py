@@ -21,7 +21,13 @@ from .pricing import cost_of_step, fmt, trajectory_cost
 from .regress import recorded_runs
 from .regress import rerun as rerun_sessions
 from .sha import short
-from .storage import Store, default_db_path
+from .storage import (
+    DEFAULT_DIR,
+    Store,
+    default_db_path,
+    find_db_path,
+    resolve_db_path,
+)
 from .trajectory import trajectory
 from .types import (
     AblateProbe,
@@ -103,25 +109,52 @@ class RetrailGroup(click.Group):
 # was never pip-installed still has to answer `--version`, and that checkout is
 # exactly where a bug report comes from.
 @click.version_option(__version__, "-V", "--version", prog_name="retrail")
-@click.option("--db", default=None, help="Path to the sessions database.")
+@click.option(
+    "--db",
+    default=None,
+    help=(
+        "Path to the sessions database. Defaults to the nearest .retrail/ at or "
+        "above the current directory, then $RETRAIL_DB, then ./.retrail/."
+    ),
+)
 @click.pass_context
 def cli(ctx: click.Context, db: str | None) -> None:
     """retrail - git for agent trajectories."""
     ctx.ensure_object(dict)
-    ctx.obj["db"] = db or default_db_path()
+    # Both are kept: `init` creates a store *here* and must not be redirected to
+    # a discovered one, the way `git init` always makes a repo in the current
+    # directory while every other command searches upward.
+    ctx.obj["db_flag"] = db
+    ctx.obj["db"] = db or resolve_db_path()
 
 
 @cli.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    """Create .retrail/ and the sqlite database."""
-    path = ctx.obj["db"]
+    """Create .retrail/ and the sqlite database in the current directory."""
+    # Deliberately not ctx.obj["db"]: that searches upward, and `init` inside a
+    # project that already has a store would then just reopen the parent's and
+    # report success without creating anything here.
+    path = ctx.obj["db_flag"] or default_db_path()
     existed = os.path.exists(path)
+    shadowed = None if existed else find_db_path()
+
     Store(path).close()
+
     if existed:
         echo(f"Already initialized: {path}")
-    else:
-        echo(f"Initialized empty retrail store: {path}")
+        return
+
+    echo(f"Initialized empty retrail store: {path}")
+    if shadowed:
+        # Creating a store beneath an existing one is legal but is almost never
+        # what someone means, and the symptom - "my sessions vanished" - points
+        # nowhere near the cause. Say it once, here, where it is still cheap.
+        echo(
+            f"note: a store already exists above this directory at {shadowed}\n"
+            "      commands run here will now use the new one. Delete this "
+            f"{DEFAULT_DIR}/ to go back to it."
+        )
 
 
 @cli.command(name="list")

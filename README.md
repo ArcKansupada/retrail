@@ -305,6 +305,17 @@ retrail cost <session-id>                              # cost/token breakdown pe
 
 SHA prefix matching applies throughout. An ambiguous prefix is an error asking for a longer one — same as git.
 
+### Where the store lives
+
+Commands search upward for `.retrail/` from the current directory, so running one deep inside a project finds the project's store rather than making a new one beside you — the same rule git uses to find `.git/`. In precedence order:
+
+1. `--db PATH` on the command line.
+2. `RETRAIL_DB` in the environment, for pointing a shell or a CI job at one store.
+3. The nearest `.retrail/sessions.db` at or above the current directory.
+4. Otherwise `./.retrail/sessions.db`, created on first use.
+
+`retrail init` is the exception: like `git init`, it always creates a store *here*. If that shadows one further up, it says so.
+
 ## Python API
 
 ```python

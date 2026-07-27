@@ -36,9 +36,11 @@ _default_stores: dict[str, Store] = {}
 
 
 def _default_store() -> Store:
-    from .storage import default_db_path
+    from .storage import resolve_db_path
 
-    path = default_db_path()
+    # Searches upward, so an agent launched from a subdirectory of the project
+    # records into the project's store - the same one the CLI will find.
+    path = resolve_db_path()
     if path not in _default_stores:
         _default_stores[path] = Store(path)
     return _default_stores[path]

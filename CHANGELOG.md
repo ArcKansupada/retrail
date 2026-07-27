@@ -11,6 +11,12 @@ existing key will not silently change meaning.
 ## [Unreleased]
 
 ### Added
+- **The store is found by searching upward**, the way git finds `.git/`. A
+  command run in a subdirectory now uses the project's store instead of quietly
+  creating a second, empty one beside itself — see *Fixed* below. `RETRAIL_DB`
+  points a whole shell or CI job at one store; `--db` still outranks everything.
+  `retrail init` is the deliberate exception: like `git init` it always creates
+  here, and now prints a `note:` if that shadows a store further up.
 - **Schema versioning.** The database now records which schema wrote it
   (`PRAGMA user_version`), and a file written by a newer retrail is refused at
   open time with a `SchemaVersionError` naming both versions, instead of being
@@ -37,6 +43,15 @@ existing key will not silently change meaning.
   tested, and 3.9 reached end of life in October 2025.
 - The package version is single-sourced from `retrail/__init__.py`; the
   duplicate in `pyproject.toml` is gone.
+
+### Fixed
+- **A run recorded from a subdirectory is no longer invisible.** `.retrail/` was
+  resolved against the current working directory and nothing else, so `retrail
+  log` one level down created a fresh database and truthfully reported no
+  sessions while the real trace sat untouched one directory up. Recording split
+  the same way — an agent launched from a subdirectory wrote somewhere the CLI
+  would never look — and the two halves could disagree without either ever
+  raising.
 
 ## [0.1.0]
 

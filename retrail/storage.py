@@ -20,6 +20,10 @@ from .types import JSON, EditProvenance, Session, SessionStatus, Step, StepType
 DEFAULT_DIR = ".retrail"
 DB_NAME = "sessions.db"
 
+#: Points every command at one store, overriding upward search. Useful for a
+#: CI job or a shell working against a store outside the current tree.
+ENV_VAR = "RETRAIL_DB"
+
 #: Bump when the tables change, and add a migration in `_migrate` for every
 #: version that has ever shipped. Stored in the file itself via
 #: `PRAGMA user_version`, so a database always states which schema wrote it.
@@ -65,7 +69,51 @@ CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 
 
 def default_db_path(root: str | None = None) -> str:
+    """Where a store rooted at `root` (default: cwd) lives.
+
+    This is where a store is CREATED. For finding one that already exists, use
+    `resolve_db_path` - the two differ, the same way `git init` always makes a
+    repo here while every other git command searches upward.
+    """
     return os.path.join(root or os.getcwd(), DEFAULT_DIR, DB_NAME)
+
+
+def find_db_path(start: str | None = None) -> str | None:
+    """The nearest existing store at or above `start`, or None.
+
+    Searching upward is what makes the store belong to the *project* rather
+    than to whichever directory you happened to be standing in. Without it,
+    `retrail log` run one level down silently created a second, empty database
+    and reported no sessions - while the real trace sat untouched one directory
+    up. Recording had the same split: an agent launched from a subdirectory
+    wrote somewhere the CLI would never look.
+    """
+    current = os.path.abspath(start or os.getcwd())
+    while True:
+        candidate = os.path.join(current, DEFAULT_DIR, DB_NAME)
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(current)
+        if parent == current:  # filesystem root
+            return None
+        current = parent
+
+
+def resolve_db_path(start: str | None = None) -> str:
+    """Which database a command should use, in precedence order.
+
+    1. `RETRAIL_DB`, for pointing a whole shell or CI job at one store.
+    2. The nearest existing store at or above `start`.
+    3. `start`/.retrail/sessions.db - create-here, which is what happens on a
+       first run and keeps behaviour unchanged when there is nothing above.
+
+    An explicit `--db` outranks all three; the CLI never calls this when the
+    flag was given.
+    """
+    from_env = os.environ.get(ENV_VAR)
+    if from_env:
+        return from_env
+    return find_db_path(start) or default_db_path(start)
 
 
 def schema_version(conn: sqlite3.Connection) -> int:

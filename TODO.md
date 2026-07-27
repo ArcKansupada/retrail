@@ -65,12 +65,14 @@ Still needs you:
       argument type, and a missing argument all flagged — with "did you mean"
       suggestions. Three latent issues surfaced and were fixed along the way (see
       below).
-- [ ] **Find the store by walking up, like git does.** `default_db_path()` is
-      `os.getcwd() + "/.retrail"`, full stop. Consequences: running `retrail log` from
-      a subdirectory silently creates a *second, empty* store instead of finding the
-      one above it, and running your agent from a different working directory records
-      into a different database than the CLI reads. Walk parents for `.retrail/`, and
-      honour a `RETRAIL_DB` environment variable.
+- [x] **Find the store by walking up, like git does.** *(done 2026-07-26)*
+      `find_db_path()` searches from cwd to the filesystem root; `resolve_db_path()`
+      layers precedence over it — `RETRAIL_DB`, then the search, then create-here.
+      `--db` still outranks all three. `init` deliberately does *not* search (like
+      `git init`), but prints a `note:` when it shadows a store above, because the
+      symptom otherwise is "my sessions vanished", a long way from the cause.
+      13 tests in `tests/test_discovery.py`; four of them fail if the upward search
+      is removed, which is the check that they pin the bug and not just the code.
 - [x] **Schema versioning.** *(done 2026-07-26)* `SCHEMA_VERSION` stamped into the
       file via `PRAGMA user_version`; a newer database raises `SchemaVersionError`
       naming both versions and pointing at `pip install -U retrail`. Pre-versioning
@@ -200,7 +202,7 @@ Three things mypy found that were latent, not stylistic. All fixed:
 
 1. ~~`git init` + LICENSE + metadata + CI~~ — **done**, minus pushing to GitHub.
 2. ~~Type hints + `py.typed`~~ — **done.**
-3. Store discovery walks up to find `.retrail/` *(silent wrong-database bug)*
+3. ~~Store discovery walks up to find `.retrail/`~~ — **done.**
 4. Raise on async agents *(silent corruption today)*
 5. `retrail export` / `import` *(the sharable-repro feature, cheap to build)*
 6. `prune` + hiding probe sessions *(the store becomes unreadable within a day of real use)*
