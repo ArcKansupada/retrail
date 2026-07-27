@@ -24,11 +24,8 @@ from .storage import Store
 from .trajectory import trajectory
 
 # The shapes every function above returns. Re-exported so annotating your own
-# code never means importing from a private-looking submodule:
-#
-#     from retrail import Step, DiffResult
-#
-# See retrail/types.py, and CHANGELOG.md for what "stable" means before 1.0.
+# code never means importing from a private-looking submodule. See
+# retrail/types.py, and CHANGELOG.md for what "stable" means before 1.0.
 from .types import (
     JSON,
     AblateProbe,

@@ -1,14 +1,14 @@
 """Turning live objects into stable JSON.
 
-Two requirements pull in the same direction here:
+Two requirements pull in the same direction:
 
 1. Step SHAs hash the serialized input/output, so serialization must be
    deterministic - same object, same bytes, forever.
-2. A fork replays recorded state back into a live loop, so serialization must
-   round-trip losslessly for anything we intend to replay.
+2. A fork replays recorded state back into a live loop, so it must round-trip
+   losslessly for anything we intend to replay.
 
-Where (2) can't be met we say so loudly rather than storing a lossy shadow of
-the object and pretending the replay is faithful.
+Where (2) can't be met we say so loudly rather than storing a lossy shadow and
+pretending the replay is faithful.
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ def to_jsonable(obj: Any, _path: str = "", _seen: frozenset[int] | None = None) 
     if isinstance(obj, _PRIMITIVES):
         return obj
 
-    # Cycles would otherwise recurse forever. A cyclic message history is not
-    # something we can replay, so refuse.
+    # A cyclic message history is not something we can replay, and would
+    # recurse forever. Refuse.
     marker = id(obj)
     if marker in _seen:
         raise ReplayIntegrityError(
@@ -64,7 +64,6 @@ def to_jsonable(obj: Any, _path: str = "", _seen: frozenset[int] | None = None) 
     if hasattr(obj, "model_dump"):
         return to_jsonable(obj.model_dump(mode="json"), _path, _seen)
 
-    # SDK objects exposing a dict view.
     if hasattr(obj, "to_dict"):
         return to_jsonable(obj.to_dict(), _path, _seen)
 
@@ -89,7 +88,7 @@ def to_jsonable(obj: Any, _path: str = "", _seen: frozenset[int] | None = None) 
 def canonical_json(obj: JSON) -> str:
     """Deterministic JSON. Feeds both storage and step SHAs.
 
-    `sort_keys` is what makes a SHA stable across runs - without it, dict
+    `sort_keys` is what keeps a SHA stable across runs: without it, dict
     ordering would give the same logical step a different SHA.
     """
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

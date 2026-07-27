@@ -1,28 +1,16 @@
 """The shapes retrail hands back.
 
-Every public function returns a plain dict. That stays true - the records are
-JSON-shaped, they print, they serialize, and nothing downstream has to learn a
-class hierarchy to read one. But "plain dict" is not the same as "undocumented
-dict", and before this module the only description of a step record was prose
-in a README, which no editor and no type checker can read.
+Every public function returns a plain dict, and that stays true. A TypedDict
+*is* a dict at runtime, so nothing here changes behaviour - it only puts the
+key names somewhere a tool can find them, and gives a shape change one place
+to happen.
 
-A TypedDict *is* a dict at runtime, so nothing here changes behaviour: no
-construction cost, no isinstance semantics, no new failure mode. What it buys
-is that the key names exist somewhere a tool can find them, and that a shape
-change has exactly one place to happen.
+`JSON = Any` means "arbitrary recorded payload". A precise recursive alias
+would be more honest about the data but would force a cast at nearly every
+read, burying the annotations that carry real information.
 
-On `JSON = Any`
----------------
-Recorded inputs and outputs are whatever the user's model and tools produced.
-A precise recursive JSON alias would be more honest about the data but would
-force a cast at nearly every read of a payload, which buries the annotations
-that carry real information. `JSON` is an alias for `Any` that says "arbitrary
-recorded payload" to a reader while staying out of the way of the checker.
-
-Stability
----------
-Per CHANGELOG.md: before 1.0 these shapes may GAIN keys in a minor release.
-An existing key will not silently change meaning.
+Stability, per CHANGELOG.md: before 1.0 these shapes may GAIN keys in a minor
+release. An existing key will not silently change meaning.
 """
 
 from __future__ import annotations
@@ -67,8 +55,8 @@ JSON = Any
 
 StepType = Literal["model_call", "tool_call"]
 
-#: Where a trajectory entry came from. Not a heuristic - a step is `replayed`
-#: if it lives in an ancestor session and `live` if this session executed it.
+#: Not a heuristic: a step is `replayed` if it lives in an ancestor session,
+#: `live` if this session executed it.
 Origin = Literal["replayed", "live"]
 
 SessionStatus = Literal["running", "complete", "failed"]
@@ -85,8 +73,8 @@ class Session(TypedDict):
     parent_session_id: str | None
     parent_sha: str | None
     forked_at_step: int | None
-    #: The fork's edit, as stored JSON text. `None` for a root run or an
-    #: unedited fork. Parsed form reaches you as `TrajectoryEntry["edit"]`.
+    #: `None` for a root run or an unedited fork. Parsed form reaches you as
+    #: `TrajectoryEntry["edit"]`.
     edit_json: str | None
     created_at: float
     status: SessionStatus
@@ -113,9 +101,8 @@ class Step(TypedDict):
 class TrajectoryEntry(TypedDict):
     """A step as it appears in a materialized trajectory.
 
-    Deliberately not a `Step`: it carries provenance (`origin`, `edited`,
-    `edit`) that only exists once the parent chain has been walked, and drops
-    the storage-local `id` and `created_at`.
+    Deliberately not a `Step`: it carries provenance that exists only once the
+    parent chain has been walked, and drops the storage-local `id`/`created_at`.
     """
 
     sha: str
@@ -143,10 +130,10 @@ class _PatchOpRequired(TypedDict):
 
 
 class PatchOp(_PatchOpRequired, total=False):
-    """One patch operation. `value` is required except for `remove`.
+    """One patch operation; `value` is required except for `remove`.
 
-    Split across two TypedDicts because `typing.NotRequired` landed in 3.11 and
-    retrail supports 3.10.
+    Split in two because `typing.NotRequired` landed in 3.11 and retrail
+    supports 3.10.
     """
 
     value: JSON
@@ -170,7 +157,7 @@ class CallbackProvenance(TypedDict):
     note: str
 
 
-#: Stored on the fork's session row so `retrail log` can show WHAT changed, not
+#: Stored on the fork's session row so `retrail log` shows WHAT changed, not
 #: just where.
 EditProvenance = PatchProvenance | CallbackProvenance
 
@@ -181,8 +168,7 @@ EditProvenance = PatchProvenance | CallbackProvenance
 class CheckFunction(Protocol):
     """A parsed check: does this final answer look like a good run?
 
-    Carries the source expression so results can report the check they applied
-    rather than `<function check at 0x...>`.
+    Carries its source expression so results can name the check they applied.
     """
 
     expression: str
@@ -197,8 +183,8 @@ Check = str | Callable[[str | None], bool]
 class Agent(Protocol):
     """A `@record`-decorated agent loop.
 
-    The one structural requirement: it takes the message history as its first
-    positional argument, which is what lets a fork seed it with edited state.
+    One structural requirement: the message history is its first positional
+    argument, which is what lets a fork seed it with edited state.
     """
 
     __retrail_agent__: bool
@@ -383,8 +369,8 @@ class DiffResult(TypedDict):
     a: DiffSide
     b: DiffSide
     common_ancestor: str | None
-    #: Only the LEADING run of equal steps. A later equal block means the runs
-    #: re-converged, which is interesting but is not prefix.
+    #: Only the LEADING run of equal steps; a later equal block is
+    #: re-convergence, not prefix.
     shared_prefix: list[TrajectoryEntry]
     divergence: Divergence | None
     blocks: list[DiffBlock]

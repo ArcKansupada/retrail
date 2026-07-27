@@ -2,8 +2,8 @@
 
 A fork session stores only the steps it actually re-executed; the prefix it
 replayed lives in its parent. That's the right storage shape - a fork is a git
-branch, not a copy - but it means "the full path of steps from session start to
-its current tip" has to be assembled by walking the parent chain.
+branch, not a copy - but the full path from session start to tip then has to be
+assembled by walking the parent chain.
 
 Every entry is tagged with where it came from, so nothing downstream has to
 guess which steps are replayed history and which are genuine new generation:
@@ -11,8 +11,8 @@ guess which steps are replayed history and which are genuine new generation:
     origin="replayed"  came from an ancestor; no model call was made for it
     origin="live"      this session actually re-executed it
 
-That distinction is one of the design doc's open questions, and it is answered
-here by construction rather than by a heuristic.
+One of the design doc's open questions, answered by construction rather than by
+a heuristic.
 """
 
 from __future__ import annotations
@@ -56,10 +56,10 @@ def _walk(store: Store, session_id: str, seen: set[str]) -> list[TrajectoryEntry
         entry["origin"] = "replayed"
 
     if forked_from["step_type"] == "tool_call":
-        # The fork resumed *after* this tool call, seeing a substituted result.
-        # So the step itself is part of the replayed prefix - but the fork saw a
-        # different output for it than the parent recorded, and that difference
-        # is the whole reason the trajectories diverge. Show what the fork saw.
+        # The fork resumed *after* this tool call, so the step is part of the
+        # replayed prefix - but the fork saw a different output for it than the
+        # parent recorded, and that difference is the whole reason the
+        # trajectories diverge. Show what the fork saw.
         forked_from = cast(
             TrajectoryEntry,
             dict(
@@ -87,10 +87,9 @@ def _as_seen_by(store: Store, session_id: str, forked_from: TrajectoryEntry) -> 
     """Recover the tool output the fork actually resumed with.
 
     The fork's first model call recorded its input verbatim, and that input is
-    the spliced history - so the edited value is readable straight off the
-    fork's own record. That works for a callback edit too, which cannot be
-    replayed from its stored provenance: we don't re-derive the edit, we read
-    its effect.
+    the spliced history - so the edited value reads straight off the fork's own
+    record. That covers a callback edit too, which cannot be replayed from its
+    stored provenance: we read the effect rather than re-deriving it.
     """
     own = store.steps_for(session_id)
     if not own or own[0]["step_type"] != "model_call":

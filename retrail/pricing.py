@@ -1,12 +1,11 @@
 """Turning recorded usage into dollars.
 
-The rule here is the same one the rest of retrail follows: never guess. An
-unknown model returns None rather than a plausible-looking number, because a
-silently wrong cost is worse than a missing one - you would act on it.
+Never guess: an unknown model returns None rather than a plausible-looking
+number, because a silently wrong cost is worse than a missing one - you would
+act on it.
 
-Prices are USD per million tokens, and they go stale. They are a lookup table,
-not a source of truth: check `retrail cost` against your actual bill before
-trusting it for anything that matters.
+Prices are USD per million tokens and they go stale. They are a lookup table,
+not a source of truth: check `retrail cost` against your actual bill.
 """
 
 from __future__ import annotations
@@ -16,9 +15,8 @@ from typing import Any
 
 from .types import Step, TrajectoryEntry
 
-#: Either kind of record carries the model call's own usage, so both can be
-#: priced. Keeping this explicit is what lets `trajectory_cost` take the output
-#: of `trajectory()` and `store.steps_for()` without a cast at the call site.
+#: Both record kinds carry the model call's own usage. Naming the union lets
+#: `trajectory_cost` take `trajectory()` or `store.steps_for()` output uncast.
 PricedEntry = Step | TrajectoryEntry
 
 # (input, output) USD per 1M tokens. Cached 2026-06.
@@ -60,9 +58,9 @@ def normalize(model: Any) -> str | None:
 def cost_of(serialized_response: Any) -> float | None:
     """Cost in USD for one model call, or None if it cannot be known exactly.
 
-    Returns None - not zero, and not an estimate - when the model is unknown or
-    usage is absent. Callers must treat None as "unpriced" and say so, rather
-    than summing it as free.
+    None - not zero, and not an estimate - when the model is unknown or usage
+    is absent. Callers must treat it as "unpriced" and say so, rather than
+    summing it as free.
     """
     if not isinstance(serialized_response, dict):
         return None
@@ -89,14 +87,13 @@ def cost_of(serialized_response: Any) -> float | None:
 def cost_of_step(entry: PricedEntry) -> float | None:
     """A recorded step's cost, preferring what was actually paid.
 
-    The stored `cost_usd` is authoritative: it was computed at record time, at
-    the prices in force then, and that is what the run really cost. Re-pricing
-    an old trace against today's table would quietly rewrite history.
+    The stored `cost_usd` is authoritative: computed at record time at the
+    prices in force then, which is what the run really cost. Re-pricing an old
+    trace against today's table would quietly rewrite history.
 
-    Falling back to deriving it from the recorded output only matters for
-    traces recorded before cost tracking existed, or whose model was unknown at
-    the time. The response carries its own model and usage, so the number is
-    still exact - just computed later.
+    The fallback only matters for traces recorded before cost tracking existed,
+    or whose model was unknown then. The response carries its own model and
+    usage, so the number is still exact - just computed later.
     """
     if entry.get("step_type") != "model_call":
         return None
@@ -109,8 +106,8 @@ def cost_of_step(entry: PricedEntry) -> float | None:
 def trajectory_cost(entries: Iterable[PricedEntry]) -> tuple[float, int]:
     """(cost, unpriced_calls) over a trajectory's model calls.
 
-    Reports how many calls could not be priced instead of hiding them, so a
-    partial total is never mistaken for a complete one.
+    Reports the calls it could not price rather than hiding them, so a partial
+    total is never mistaken for a complete one.
     """
     total = 0.0
     unpriced = 0

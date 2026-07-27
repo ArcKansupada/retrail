@@ -1,34 +1,23 @@
 """Ablation and sweep - forking many times over one axis and comparing.
 
 Both are the same move as bisect: fork, re-execute for real, evaluate a check.
-Neither needs a new primitive. They differ only in what they vary.
 
     ablate  varies the STEP    - perturb each fact in turn, see which matter
     sweep   varies the VALUE   - substitute N values at one step, find a threshold
 
-Why a check rather than comparing answers
------------------------------------------
-A real model rewords itself on every run. Two identical re-executions of the
-same prompt produce different text, so "did the answer change?" by text
-equality would flag every step as load-bearing no matter what we perturbed --
-it would be measuring non-determinism, not causation. A check collapses the
-answer to a stable predicate, which is the same reason bisect takes one.
+A check rather than comparing answers, because a real model rewords itself on
+every run: text equality would measure non-determinism, not causation.
 
-What ablation actually proves
------------------------------
-The signal is asymmetric, and callers are told so rather than left to assume
-symmetry:
+The signal is asymmetric, and callers are told so:
 
-  check did NOT flip -> the fact is soundly NOT load-bearing. The answer
-                        survived without it. This is a real conclusion.
-  check DID flip     -> the fact is only POSSIBLY load-bearing. The agent may
-                        be reacting to the perturbation itself (a tool that now
-                        errors) rather than to the specific value it lost.
+  check did NOT flip -> soundly NOT load-bearing. The answer survived without
+                        the fact. A real conclusion.
+  check DID flip     -> only POSSIBLY load-bearing. The agent may be reacting
+                        to the perturbation itself (a tool that now errors)
+                        rather than to the value it lost.
 
-Ablation rules facts out rigorously and rules them in suggestively. That is
-still far more than attribution-based blame could honestly claim, because this
-is intervention rather than inference -- and it is only possible because
-forking re-executes for real.
+So ablation rules facts out rigorously and rules them in suggestively - still
+more than attribution could claim, because this is intervention, not inference.
 """
 
 from __future__ import annotations
@@ -62,8 +51,8 @@ if TYPE_CHECKING:
     from .storage import Store
 
 # A neutral "this fact was not available" stand-in. Valid JSON, because tool
-# result content is conventionally a JSON string and an agent that parses it
-# should see a well-formed object rather than a syntax error.
+# result content is conventionally a JSON string: an agent parsing it should
+# see a well-formed object, not a syntax error.
 UNAVAILABLE = json.dumps({"error": "data unavailable"})
 
 
@@ -79,11 +68,8 @@ def _probe(
     # callable, which carries no `.expression`. Only the parsed kind does.
     check: Callable[[str | None], bool] | None,
 ) -> dict[str, Any]:
-    """Fork once and re-execute. A failure is an outcome, not a crash.
-
-    Sweeps and ablations run many probes; one bad probe must not destroy the
-    other results, so the error is captured and reported alongside them.
-    """
+    """Fork once and re-execute. A failure is an outcome, not a crash: many
+    probes run, so one error is reported alongside the rest, not raised."""
     try:
         fork_id = fork(
             from_sha=sha,
@@ -115,7 +101,7 @@ def _default_perturbation(step: Step) -> Patch:
     """Blank every result this step produced.
 
     One op per result rather than a fixed `/output/0/content`, so a step with
-    parallel tool calls is fully ablated instead of only its first result.
+    parallel tool calls is fully ablated, not just its first result.
     """
     return [
         {"op": "replace", "path": f"/output/{i}/content", "value": UNAVAILABLE}
@@ -145,14 +131,9 @@ def ablate(
     baseline = final_answer(trajectory(store, session_id))
     baseline_passed = check(baseline)
     if not baseline_passed:
-        # Ablation asks "which facts is this outcome load-bearing on?" -- that
-        # only means something if the outcome is one you wanted. With a failing
-        # baseline, every probe reports "outcome held" and gets labelled NOT
-        # load-bearing, which reads as reassuring and is actually vacuous: the
-        # run was broken the whole time.
-        #
-        # ablate and bisect are duals. Bisect is the tool for a run that failed;
-        # ablate is the tool for a run that worked. Each refuses the other's job.
+        # With a failing baseline every probe reports "outcome held" and gets
+        # labelled NOT load-bearing - reassuring, and vacuous: the run was
+        # broken the whole time. Bisect is the tool for that case.
         raise RetrailError(
             "the check does not pass on the original run, so there is no good "
             "outcome to ablate. Ablation asks which facts a SUCCESSFUL run "
@@ -217,10 +198,7 @@ def ablate(
             else (None, 0)
         )
         # What deleting this fact would do to the bill. Measured, not modelled:
-        # both figures are the real recorded cost of a real trajectory. A step
-        # that is NOT load-bearing and has a negative delta is a deletion
-        # candidate backed by evidence -- the outcome survived without it, and
-        # the run got cheaper.
+        # both figures are the real recorded cost of a real trajectory.
         probe["cost_delta"] = (
             None
             if probe["cost_usd"] is None or baseline_cost is None
@@ -266,9 +244,9 @@ def sweep(
 ) -> SweepResult:
     """Substitute N values at one step and compare the outcomes.
 
-    Finds thresholds: at what fare does it stop booking? `check` is optional --
-    without one you get each value's answer verbatim, which is useful when you
-    are reading the results rather than automating over them.
+    Finds thresholds: at what fare does it stop booking? `check` is optional -
+    without one you get each value's answer verbatim, which is what you want
+    when reading the results rather than automating over them.
     """
     if isinstance(check, str):
         check = parse_check(check)

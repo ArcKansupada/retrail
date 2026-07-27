@@ -1,7 +1,7 @@
 """A toy three-tool booking agent you can fork, diff, and bisect immediately.
 
-Deliberately a raw SDK-shaped loop — a `while` loop calling the model,
-executing tool calls, appending results — because that's retrail's target user.
+Deliberately a raw SDK-shaped loop - call the model, execute tool calls, append
+results - because that is retrail's target user.
 
 It ships with a scripted `call_model` so you can try everything with no API key
 and no spend. Swap it for the real thing and nothing else changes:
@@ -64,7 +64,7 @@ def call_model(messages, tools=None):
     """A scripted stand-in for `client.messages.create`. No API key needed.
 
     It branches on what the tools return, which is what makes forking
-    interesting: substitute a fact and the agent genuinely takes another path.
+    interesting: substitute a fact and the agent takes another path.
     """
     last = messages[-1]
 
@@ -84,10 +84,9 @@ def call_model(messages, tools=None):
     payload = json.loads(latest["content"])
 
     if latest["tool_use_id"] == "toolu_search":
-        # Handle a missing fare rather than assuming the schema. A real model
-        # copes with a tool that returned nothing useful, and `retrail ablate`
-        # relies on that: it blanks each fact in turn to see which ones matter,
-        # so an agent that hard-crashes on a blank result can't be ablated.
+        # Handle a missing fare rather than assuming the schema. `retrail
+        # ablate` blanks each fact in turn to see which ones matter, so an
+        # agent that hard-crashes on a blank result cannot be ablated.
         if "flight_price" not in payload:
             return _reply("I couldn't get a fare for that route.", usage=(520, 12))
         price = payload["flight_price"]
@@ -166,9 +165,9 @@ def _run(name, args):
         return {"approved": False, "limit": 600, "amount": args["amount"]}
     if name == "book_flight":
         # Simulates the airline API being down. Set RETRAIL_DEMO_OUTAGE=1 to
-        # record a failing run, then bisect it with the variable unset — the
-        # outage is over, so re-execution can recover, which is exactly the
-        # transient failure bisect exists to localize.
+        # record a failing run, then bisect it with the variable unset: the
+        # outage is over, so re-execution can recover - exactly the transient
+        # failure bisect exists to localize.
         if os.environ.get("RETRAIL_DEMO_OUTAGE"):
             return {"error": "airline API timed out"}
         return {"confirmation": "QX7R2M", "amount": args["amount"]}
@@ -177,17 +176,15 @@ def _run(name, args):
 
 @record(session_name="booking-agent")
 def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execute_tools):
-    """A raw agent loop.
-
-    Two things make this forkable, and they're the whole integration contract:
+    """A raw agent loop. The whole integration contract is two things:
 
     1. `messages` is a parameter, so a fork can seed it with edited history
        instead of always starting blank.
     2. The model call and the tool executor are passed in, so @record can
        intercept them without monkey-patching the SDK.
 
-    The defaults are what let `retrail fork --agent ...` and `retrail bisect`
-    call this with only the seeded message list.
+    The defaults let `retrail fork --agent ...` and `retrail bisect` call this
+    with only the seeded message list.
     """
     while True:
         response = call_model(messages, tools)

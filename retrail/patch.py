@@ -1,19 +1,17 @@
 """The fork `edit` API - structured patch native, callback as escape hatch.
 
-A patch is data, so it can be stored on the fork's session row. That's what
-lets `retrail log` show not just WHERE you forked (the parent SHA) but WHAT you
-changed - otherwise two forks from the same step with opposite edits are
-indistinguishable. It's also the only shape the CLI can accept, since
-`--edit-file edit.json` cannot hold a lambda.
+A patch is data, so it can be stored on the fork's session row: that is what
+lets `retrail log` show WHAT you changed, not just where - otherwise two forks
+from the same step with opposite edits are indistinguishable. It is also the
+only shape the CLI can accept, since `--edit-file edit.json` cannot hold a
+lambda.
 
-A callback is accepted from Python for edits that depend on the step's existing
-content (double a price, truncate a document) and for bisect, which generates
-edits programmatically. Callback forks record that a callback ran but cannot
-round-trip from the record alone - that limitation is real and stated, not
-papered over.
+A callback covers edits that depend on the step's existing content (double a
+price, truncate a document) and bisect, which generates edits programmatically.
+Callback forks record that a callback ran but cannot round-trip from the record
+alone - a real limitation, stated rather than papered over.
 
-Patch paths are JSON Pointers rooted at the step, so `/output/0/content`
-addresses the first tool result's content.
+Patch paths are JSON Pointers rooted at the step.
 """
 
 from __future__ import annotations
@@ -157,10 +155,10 @@ def _apply_one(doc: JSON, op: Any) -> JSON:
 def normalize_edit(edit: Edit) -> tuple[EditFn, EditProvenance | None]:
     """Return (apply_fn, provenance) for either edit shape.
 
-    `provenance` is what gets stored on the fork's session row. For a patch
-    that's the patch itself, so the fork fully round-trips. For a callback it's
-    an honest marker: we record that one ran and what it was called, and say
-    plainly that it can't be replayed from the record.
+    `provenance` is stored on the fork's session row. For a patch it is the
+    patch itself, so the fork fully round-trips. For a callback it is an honest
+    marker: that one ran, what it was called, and that it cannot be replayed
+    from the record.
     """
     if edit is None:
         return (lambda step: copy.deepcopy(step)), None

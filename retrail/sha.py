@@ -1,12 +1,11 @@
 """Content-addressed step identity.
 
 A step SHA hashes (session id, step number, serialized input, serialized
-output) - git-commit style. That makes a step a copy-pasteable handle: you can
-fork, show, or diff from a single string with no session id + step number pair
-to carry around.
+output), git-commit style, making a step a copy-pasteable handle: fork, show,
+or diff from one string, with no session id + step number pair to carry around.
 
-Full SHAs are stored; short ones are displayed. Prefix lookups resolve like
-git's: unique prefix wins, ambiguity is an error rather than a guess.
+Full SHAs are stored; short ones displayed. Prefix lookups resolve like git's:
+unique prefix wins, ambiguity is an error rather than a guess.
 """
 
 from __future__ import annotations

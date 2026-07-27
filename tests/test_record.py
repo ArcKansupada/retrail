@@ -22,8 +22,8 @@ def test_records_the_whole_loop_with_a_sha_per_step(store, opening):
 def test_model_call_input_is_the_history_verbatim_at_call_time(store, opening):
     """The snapshot must freeze the history as it was, not as it ended up.
 
-    The whole fork mechanic reads these snapshots back, so a snapshot that
-    aliases the live list would replay the *final* state at every step.
+    The fork mechanic reads these snapshots back, so one that aliased the live
+    list would replay the *final* state at every step.
     """
     agent = record(session_name="booking", store=store)(raw_agent)
     agent(opening, TOOLS, fake_model, make_executor(450))
@@ -34,7 +34,7 @@ def test_model_call_input_is_the_history_verbatim_at_call_time(store, opening):
     assert len(first["input"]["messages"]) == 1
     assert first["input"]["messages"][0]["content"] == "Book me AUS to SFO."
     # By the second model call the loop has appended the assistant turn and the
-    # tool result — and the snapshot shows exactly that, not the final history.
+    # tool result - and the snapshot shows that, not the final history.
     assert len(second["input"]["messages"]) == 3
     assert second["input"]["messages"][-1]["content"][0]["type"] == "tool_result"
 
@@ -147,8 +147,8 @@ def test_a_non_callable_interception_point_fails_at_the_boundary(store, opening)
     """@record wraps call_model/execute_tools BEFORE the body runs.
 
     So a `None` sentinel meant to be swapped out inside the body gets wrapped
-    instead, and dies as "'NoneType' object is not callable" several frames
-    deep in retrail. A live agent hit exactly that. Fail where the mistake is.
+    instead and dies as "'NoneType' object is not callable" several frames deep
+    in retrail. A live agent hit exactly that. Fail where the mistake is.
     """
     agent = record(session_name="booking", store=store)(raw_agent)
 
@@ -164,7 +164,7 @@ def test_a_rejected_call_does_not_strand_an_empty_session(store, opening):
 
     A live fork crashed on a non-callable model arg and left an orphaned
     session row behind, which then showed up in `retrail list` and got picked
-    up by a diff. Reject the call before any row exists.
+    up by a diff.
     """
     agent = record(session_name="booking", store=store)(raw_agent)
     with pytest.raises(IntegrationError):

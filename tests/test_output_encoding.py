@@ -1,13 +1,12 @@
 """Guard: user-facing text must survive a cp1252 console.
 
-This bit twice. `retrail list` crashed outright on Windows because of box
-drawing characters, and em-dashes in help text and error messages rendered as
-garbage. Both are trivially avoidable and neither should be caught by hand
-again, so the rule is enforced rather than remembered.
+This bit twice: `retrail list` crashed outright on Windows because of box
+drawing characters, and em-dashes in help text rendered as garbage. Both are
+trivially avoidable, so the rule is enforced rather than remembered.
 
 The one sanctioned exception is `_glyphs()`, which contains box-drawing
-characters *and* the encodability check that keeps them from ever being printed
-to a console that can't take them.
+characters *and* the encodability check that keeps them off a console that
+can't take them.
 """
 
 import pathlib
@@ -61,19 +60,18 @@ def test_glyphs_are_actually_gated():
 
 # --- model output is not ours to police ------------------------------------
 #
-# The rules above cover text WE wrote. Everything below covers text the MODEL
-# wrote, which can be any Unicode at all. A real Opus run returned an emoji and
-# killed a plain `print` — and retrail prints model text in diff (final
-# answers), bisect (probe answers), and log (summaries), so on a cp1252 console
-# an emoji in an ANSWER would take down the command reporting it.
+# The rules above cover text WE wrote; below covers text the MODEL wrote, which
+# can be any Unicode at all. A real Opus run returned an emoji and killed a
+# plain `print`, and retrail prints model text in diff, bisect, and log - so an
+# emoji in an ANSWER would take down the command reporting it.
 
 
 class FakeConsole:
     """A writable stream reporting a specific terminal encoding.
 
-    Not an io.StringIO subclass: its `encoding` is read-only, which is the very
-    attribute under test. And it must be genuinely writable, since click.echo
-    writes to the stream rather than just inspecting it.
+    Not io.StringIO: its `encoding` is read-only, and that is the attribute
+    under test. It must also be genuinely writable, since click.echo writes to
+    the stream rather than just inspecting it.
     """
 
     def __init__(self, encoding):
@@ -114,8 +112,8 @@ def test_echo_leaves_encodable_text_untouched(monkeypatch):
 
 
 def test_echo_passes_unicode_through_on_a_utf8_console(monkeypatch):
-    """Degrading is a last resort, not the default. A capable terminal must
-    still get the real characters."""
+    """Degrading is a last resort. A capable terminal still gets the real
+    characters."""
     out = _echo_to(monkeypatch, "utf-8", "Booked ✅")
     assert "✅" in out
 

@@ -2,14 +2,12 @@
 
 Sequence alignment over step signatures, per section 6.4. `difflib.Sequence
 Matcher` is deliberately the starting point - Needleman-Wunsch is a later
-upgrade if real trajectories turn out to need it, and there is no evidence of
-that yet.
+upgrade if real trajectories turn out to need it, and there is no evidence yet.
 
-The signature is what makes the alignment meaningful: it folds in the step
-type, the tool name, and a hash of the output. Two steps match only if they did
-the same thing *and* got the same answer, so a shared prefix falls out as a
-leading run of equal signatures and the divergence point is the first step
-where the runs stop agreeing.
+The signature folds in the step type, the tool name, and a hash of the output,
+so two steps match only if they did the same thing *and* got the same answer.
+The shared prefix then falls out as the leading run of equal signatures, and
+the divergence is the first step where the runs stop agreeing.
 """
 
 from __future__ import annotations
@@ -99,8 +97,8 @@ def diff(store: Store, a_id: str, b_id: str) -> DiffResult:
         for tag, i1, i2, j1, j2 in opcodes
     ]
 
-    # The shared prefix is only the *leading* run of equal steps. A later equal
-    # block means the runs re-converged, which is interesting but is not prefix.
+    # Only the *leading* run of equal steps; a later equal block means the runs
+    # re-converged, which is not prefix.
     shared = blocks[0]["a"] if blocks and blocks[0]["tag"] == "equal" else []
     diverged = next((blk for blk in blocks if blk["tag"] != "equal"), None)
 
@@ -123,10 +121,9 @@ def _divergence(block: DiffBlock | None) -> Divergence | None:
     first_b = block["b"][0] if block["b"] else None
     anchor = first_a or first_b
     if anchor is None:
-        # difflib does not emit an empty non-equal block, so this is
-        # unreachable. It was previously unreachable AND unstated, which meant
-        # the only record of the invariant was that `(first_a or first_b)["sha"]`
-        # happened not to crash.
+        # difflib never emits an empty non-equal block, so this is unreachable.
+        # Stated, rather than left implicit in `(first_a or first_b)["sha"]`
+        # happening not to crash.
         return None
     edited = next(
         (e for e in (block["b"] or []) + (block["a"] or []) if e.get("edited")), None

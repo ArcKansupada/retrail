@@ -4,13 +4,13 @@ Forking here re-enters the live agent loop. It does not relabel stored JSON.
 
 The mechanic rests on one observation from the milestone-0 prototype: the
 message state *after* a tool call is, by construction, the exact input to the
-*next* model call - and the recorder captured that verbatim. So a fork never
+*next* model call, and the recorder captured that verbatim. So a fork never
 reconstructs history from parts. It reads back the array the user's own loop
 built, patches the one recorded fact, verifies the patch landed where the
-recording says it should, and hands it to the user's real function.
+recording says, and hands it to the user's real function.
 
-Where the patch cannot be verified, this module raises instead of guessing.
-A silently-wrong replay would be worse than no replay at all.
+Where the patch cannot be verified this module raises instead of guessing: a
+silently-wrong replay would be worse than no replay at all.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ def fork(
     `agent` must be the @record-decorated function from the original run, and
     must accept the seeded message state as its first argument.
 
-    Returns the new session id. The fork is a new session row - the original is
+    Returns the new session id. The fork is a new session row: the original is
     never mutated, so it stays intact and comparable however many times you
     branch off it.
     """
@@ -81,8 +81,8 @@ def fork(
         )
 
         # The decorator picks this up so the re-executed run records into the
-        # fork's session, carrying its parent provenance, instead of minting a
-        # fresh root session.
+        # fork's session with its parent provenance, instead of minting a fresh
+        # root session.
         _pending["session"] = {"store": store, "session_id": fork_session_id}
         try:
             agent(seed, *agent_args, **agent_kwargs)
@@ -213,8 +213,8 @@ def _find_result_block(messages: list[JSON], tool_use_id: str) -> JSON:
 def _verify_verbatim(block: JSON, recorded_entry: JSON, tool_use_id: str) -> None:
     """The recorded output must appear in the history exactly as recorded.
 
-    If the loop transformed the result before appending it, our patch would land
-    on a different value than the one the user edited - so we stop.
+    Otherwise the loop transformed it, and our patch would land on a different
+    value than the one the user edited.
     """
     for key, value in recorded_entry.items():
         if key not in block:

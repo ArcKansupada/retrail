@@ -1,8 +1,8 @@
 """The tests that matter: forking is real re-execution, or the thesis is wrong.
 
 `test_fork_matches_counterfactual` is the milestone-0 assertion promoted from a
-throwaway script into a permanent regression test. If it ever fails, retrail is
-back to being a log viewer.
+throwaway script to a permanent regression test. If it fails, retrail is back
+to being a log viewer.
 """
 
 import json
@@ -19,8 +19,8 @@ def build_agent(store):
 
 
 def run_original(store, opening, price=450):
-    # Return the session id explicitly: `agent.last_session_id` tracks the most
-    # recent recorded run, so forking through the same agent moves it.
+    # Return the session id explicitly: `agent.last_session_id` tracks the
+    # latest recorded run, so forking through the same agent moves it.
     agent = build_agent(store)
     response = agent(opening, TOOLS, fake_model, make_executor(price))
     return agent, agent.last_session_id, response
@@ -48,9 +48,9 @@ def final_text(store, session_id):
 def test_fork_matches_counterfactual(store, opening):
     """Fork == a from-scratch run in a world where the edit was always true.
 
-    This is the whole product in one assertion. Anything less — matching only
-    the edited value back, or matching the original's shape — would be
-    satisfied by relabeling stored JSON.
+    The whole product in one assertion. Anything less - matching only the
+    edited value back, or the original's shape - would be satisfied by
+    relabeling stored JSON.
     """
     agent, original_id, original = run_original(store, opening)
     assert original.content[-1]["text"] == "Booked for $450."
@@ -62,7 +62,7 @@ def test_fork_matches_counterfactual(store, opening):
         agent=agent,
         store=store,
         # The world still returns $450. Only the spliced fact changed, so any
-        # *later* tool call runs against reality — as a counterfactual should.
+        # *later* tool call runs against reality - as a counterfactual should.
         agent_args=(TOOLS, fake_model, make_executor(450)),
     )
 
@@ -87,10 +87,7 @@ def tools_run_in(store, session_id):
 
 
 def test_fork_diverges_structurally_from_the_original(store, opening):
-    """The fork grows a step the original never had.
-
-    Relabeling stored JSON cannot produce a tool call that never happened.
-    """
+    """Relabeling stored JSON could never produce a step that never happened."""
     agent, original_id, _ = run_original(store, opening)
     assert tools_run_in(store, original_id) == ["search_flight"]
 
@@ -103,19 +100,18 @@ def test_fork_diverges_structurally_from_the_original(store, opening):
         agent_args=(TOOLS, fake_model, make_executor(450)),
     )
 
-    # check_budget was never reachable in the original — the model only calls it
-    # when the price exceeds budget, which only the edit made true.
+    # check_budget was never reachable in the original - the model only calls
+    # it when the price exceeds budget, which only the edit made true.
     assert tools_run_in(store, fork_id) == ["check_budget"]
 
 
 def test_a_fork_stores_only_the_re_executed_suffix(store, opening):
     """The replayed prefix is not duplicated into the fork's session.
 
-    A fork's own steps begin at the resume point; everything before it stays in
-    the parent, reachable via parent_sha. This is the same shape as a git branch
-    — new commits only — and it means "which steps are replay vs. genuine new
-    generation" is answered by the storage layout itself, not by a heuristic:
-    every step in a fork session is real re-execution, by construction.
+    A fork's own steps begin at the resume point; everything before stays in
+    the parent, reachable via parent_sha. Same shape as a git branch, so
+    "replay vs. genuine new generation" is answered by the storage layout
+    rather than a heuristic: every step in a fork session is real re-execution.
     """
     agent, original_id, _ = run_original(store, opening)
     step = tool_step(store, original_id)
@@ -131,20 +127,19 @@ def test_a_fork_stores_only_the_re_executed_suffix(store, opening):
     session = store.get_session(fork_id)
     fork_steps = store.steps_for(fork_id)
 
-    # Fork steps are numbered from zero and none of them re-record the prefix.
+    # Numbered from zero, and none re-record the prefix.
     assert [s["step_number"] for s in fork_steps] == [0, 1, 2]
     assert not any(s["sha"] in {p["sha"] for p in store.steps_for(original_id)}
                    for s in fork_steps)
 
-    # The full trajectory is parent prefix + fork suffix, and is longer than the
-    # original run's, because the fork took a path with an extra tool call.
+    # Parent prefix + fork suffix, longer than the original run because the
+    # fork took a path with an extra tool call.
     prefix_len = session["forked_at_step"] + 1
     trajectory = prefix_len + len(fork_steps)
     assert trajectory > len(store.steps_for(original_id))
 
 
 def test_fork_leaves_the_original_session_intact(store, opening):
-    """A fork is a new session row, never a mutation."""
     agent, original_id, _ = run_original(store, opening)
     before = store.steps_for(original_id)
     before_shas = [s["sha"] for s in before]
@@ -247,12 +242,8 @@ def test_fork_a_model_call_reruns_the_decision(store, opening):
 
 
 def test_refuses_when_the_loop_transformed_the_tool_result(store, opening):
-    """If the recorded output isn't in the history verbatim, stop.
-
-    A loop that rewrites results before appending them means our patch would
-    land on a value the user never saw. Guessing here would silently produce a
-    replay that isn't what happened — the one thing retrail must never do.
-    """
+    """If the recorded output isn't in the history verbatim, stop - otherwise
+    the patch lands on a value the user never saw."""
 
     def mangling_agent(messages, tools, call_model, execute_tools):
         while True:
@@ -262,8 +253,8 @@ def test_refuses_when_the_loop_transformed_the_tool_result(store, opening):
                 return response
             results = execute_tools(response)
             # A trailing space: still valid JSON, so the run completes happily.
-            # That is exactly the danger — the corruption is invisible at run
-            # time and only matters when we try to patch this value later.
+            # That is the danger - invisible at run time, and it only matters
+            # when we try to patch this value later.
             rewritten = [dict(r, content=r["content"] + " ") for r in results]
             messages.append({"role": "user", "content": rewritten})
 
@@ -283,7 +274,7 @@ def test_refuses_when_the_loop_transformed_the_tool_result(store, opening):
 
 
 def test_refuses_to_fork_a_step_whose_successor_state_was_never_seen(store, opening):
-    """A crashed run's trailing tool_call has no observed state after it."""
+    """A crashed run's trailing tool_call has no state observed after it."""
 
     def crashing_agent(messages, tools, call_model, execute_tools):
         response = call_model(messages, tools)

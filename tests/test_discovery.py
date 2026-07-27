@@ -1,10 +1,10 @@
 """Which database a command uses.
 
-The bug these pin down was quiet and expensive: `.retrail/` was resolved
-against the current working directory and nothing else, so `retrail log` run
-one directory down created a second, empty store and truthfully reported no
-sessions - while the real trace sat untouched one level up. Recording split the
-same way, and the two halves could disagree without either ever erroring.
+The bug these pin down was quiet and expensive: `.retrail/` resolved against
+the current working directory and nothing else, so `retrail log` run one
+directory down created a second, empty store and truthfully reported no
+sessions - while the real trace sat one level up. Recording split the same way,
+and the halves could disagree without either erroring.
 
 Discovery now searches upward, like git. These tests cover the search, its
 precedence against $RETRAIL_DB and --db, and the one command that must NOT
@@ -33,7 +33,7 @@ def clean_environment(monkeypatch):
     """No inherited RETRAIL_DB, and no store cached from another test.
 
     `record` keeps one Store per path for the life of the process, so without
-    this a cached connection to a previous test's tmp_path decides the result.
+    this a connection cached from a previous test's tmp_path decides the result.
     """
     monkeypatch.delenv(ENV_VAR, raising=False)
     # importlib, because `retrail.record` the attribute is the decorator:

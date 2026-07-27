@@ -1,19 +1,17 @@
 """Live-API validation. Costs real tokens. Opt in with: pytest -m live
 
-Everything else in this suite runs against a scripted model — deterministic,
-free, and enough to prove the splice and the state handling. These tests exist
+Everything else in this suite runs against a scripted model. These tests exist
 for the assumptions that stand-in cannot check:
 
   1. the serializer against real Pydantic `Message` objects
   2. real tool_use/tool_result blocks carrying the `tool_use_id` the splice
      matches on
   3. adaptive thinking blocks surviving a round-trip through retrail's JSON
-  4. that forking is genuinely LIVE — two forks from one SHA can diverge, which
+  4. that forking is genuinely LIVE - two forks from one SHA can diverge, which
      no deterministic replay could ever produce
 
-(4) is the one that matters most. Every other test in this repo would still
-pass if fork were an extremely good replay; only a real model can tell the
-difference.
+(4) matters most: every other test here would still pass if fork were an
+extremely good replay, and only a real model can tell the difference.
 
 Cost: roughly $0.10-0.30 for the full file at effort=low.
 """
@@ -96,7 +94,7 @@ def test_a_real_message_object_round_trips_losslessly(store, recorded):
 
 
 def test_real_tool_blocks_carry_the_id_the_splice_needs(store, recorded):
-    """fork.py matches recorded output back into history by tool_use_id. If the
+    """fork.py matches recorded output back into history by tool_use_id; if the
     real SDK shaped these differently, every fork would refuse."""
     step = tool_step(store, recorded)
     assert step["input"][0]["type"] == "tool_use"
@@ -107,15 +105,15 @@ def test_real_tool_blocks_carry_the_id_the_splice_needs(store, recorded):
 def test_thinking_blocks_survive_the_round_trip(store, agent, client):
     """The hardest serializer path: thinking blocks and their signatures.
 
-    Runs at effort=high deliberately. At low effort the model often declines to
-    think at all, and this test would skip while looking like it passed — an
+    Runs at effort=high deliberately: at low effort the model often declines to
+    think at all, and this test would skip while looking like it passed - an
     untested assumption wearing a green tick.
 
-    Why a completed multi-turn run IS the assertion: the loop echoes the whole
-    content list back on the next call, and those blocks have been through
-    retrail's snapshot -> to_jsonable -> SQLite -> JSON round-trip. The API
-    rejects a thinking block whose signature has been altered. So if the second
-    model call succeeds, the round-trip preserved them byte-for-byte.
+    A completed multi-turn run IS the assertion. The loop echoes the whole
+    content list back on the next call, having taken it through retrail's
+    snapshot -> to_jsonable -> SQLite -> JSON round-trip, and the API rejects a
+    thinking block whose signature was altered. So a second model call that
+    succeeds proves the round-trip preserved them byte-for-byte.
     """
     agent(
         [{"role": "user", "content": "Book me a flight from AUS to SFO."}],
@@ -132,8 +130,8 @@ def test_thinking_blocks_survive_the_round_trip(store, agent, client):
     assert thinking, "no thinking blocks at effort=high — this test proved nothing"
     assert all("signature" in b and b["signature"] for b in thinking)
 
-    # The run got past the first model call, so the echoed-back thinking blocks
-    # were accepted. Prove the echo actually happened, rather than assuming it.
+    # The run got past the first model call, so the echoed-back blocks were
+    # accepted. Prove the echo happened rather than assuming it.
     assert len(model_calls) > 1, "run ended too early to echo thinking back"
     echoed = [
         b
@@ -208,11 +206,10 @@ def test_diff_finds_the_divergence_on_a_real_pair(store, recorded, agent, deps):
 def test_two_forks_from_one_sha_re_execute_independently(store, recorded, agent, deps):
     """Fork the same step twice with NO edit. Each must genuinely re-run.
 
-    A deterministic stand-in gives byte-identical answers every time, so this
-    is the one assertion that separates real re-execution from a very good
-    replay. The model may legitimately reach the same conclusion twice, so
-    identical *answers* are not a failure — identical SHAs would be, because
-    that would mean nothing re-ran at all.
+    The one assertion that separates real re-execution from a very good replay.
+    The model may legitimately reach the same conclusion twice, so identical
+    *answers* are not a failure - identical SHAs would be, because that would
+    mean nothing re-ran at all.
     """
     step = tool_step(store, recorded)
 
@@ -233,8 +230,8 @@ def test_two_forks_from_one_sha_re_execute_independently(store, recorded, agent,
     assert a["id"] != b["id"]
     assert a["steps"] and b["steps"], "a probe recorded nothing — it never ran"
 
-    # Distinct sessions => distinct SHAs by construction. The real evidence is
-    # that each fork produced its own fresh model output.
+    # Distinct sessions => distinct SHAs by construction; the real evidence is
+    # each fork producing its own fresh model output.
     assert a["steps"][0]["sha"] != b["steps"][0]["sha"]
     assert a["steps"][0]["output"]["id"] != b["steps"][0]["output"]["id"], (
         "both forks report the same API message id — nothing was re-executed"
@@ -245,8 +242,8 @@ def test_two_forks_from_one_sha_re_execute_independently(store, recorded, agent,
 def test_a_pure_replay_fork_reaches_the_same_conclusion(store, recorded, agent, deps):
     """Forking with no edit should still book: the facts are unchanged.
 
-    This is the control for the edit test above — it shows the divergence there
-    came from the substituted fare, not from fork() disturbing the run.
+    The control for the edit test above: it shows the divergence there came
+    from the substituted fare, not from fork() disturbing the run.
     """
     step = tool_step(store, recorded)
     fork_id = fork(

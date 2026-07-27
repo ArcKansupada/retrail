@@ -15,11 +15,8 @@ from retrail.storage import SCHEMA_VERSION, Store
 
 
 def test_sha_is_stable_across_dict_ordering():
-    """Key order must not change a step's identity.
-
-    Without this, the same logical step gets a different SHA on every run and
-    SHA addressing is worthless.
-    """
+    """Key order must not change a step's identity - otherwise the same logical
+    step gets a different SHA every run and SHA addressing is worthless."""
     a = compute_sha("s_1", 0, "model_call", {"b": 1, "a": 2}, {"z": 1, "y": 2})
     b = compute_sha("s_1", 0, "model_call", {"a": 2, "b": 1}, {"y": 2, "z": 1})
     assert a == b
@@ -124,9 +121,9 @@ def test_fork_is_a_new_row_not_a_mutation(store):
 # -- schema versioning --------------------------------------------------------
 #
 # `CREATE TABLE IF NOT EXISTS` accepts a database written by any other version
-# of retrail and then misbehaves somewhere else, later. These tests pin the
-# behaviour that replaces that: the file states which schema wrote it, and a
-# version this code cannot read is refused at open time.
+# of retrail and then misbehaves somewhere else, later. These tests pin what
+# replaced it: the file states which schema wrote it, and a version this code
+# cannot read is refused at open time.
 
 
 def _user_version(path):
@@ -199,7 +196,7 @@ def test_refusing_a_newer_schema_does_not_leave_the_file_locked(tmp_path):
 def test_a_pre_versioning_database_is_adopted_not_refused(tmp_path):
     """retrail 0.1.0 wrote v1 tables with no stamp. That layout IS v1.
 
-    Refusing these would mean refusing every trace recorded before the marker
+    Refusing them would mean refusing every trace recorded before the marker
     existed, which is the opposite of the point.
     """
     path = str(tmp_path / "legacy.db")

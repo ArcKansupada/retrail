@@ -1,17 +1,16 @@
 """The same booking agent, against the real Claude API.
 
-This is the live twin of `booking_agent.py`. The loop, the @record contract,
-and the fork/diff/bisect commands are all identical — the only difference is
-that `call_model` really calls `client.messages.create`.
+The live twin of `booking_agent.py`: the loop, the @record contract, and the
+fork/diff/bisect commands are identical, and only `call_model` differs.
 
-Its job is to exercise the paths a scripted model can never reach:
+It exercises the paths a scripted model can never reach:
 
   * `serialize.to_jsonable` against real Pydantic `Message` objects
   * real `tool_use` / `tool_result` blocks carrying the `tool_use_id` that
     fork.py's splice matches on
   * adaptive thinking blocks surviving a round-trip through retrail's JSON
-  * genuine non-determinism — two forks from one SHA can differ, which is the
-    one thing a deterministic stand-in cannot demonstrate
+  * genuine non-determinism - two forks from one SHA can differ, which a
+    deterministic stand-in cannot demonstrate
 
 Needs credentials. Either export ANTHROPIC_API_KEY, or put it in a .env file
 at the repo root (gitignored):
@@ -89,9 +88,8 @@ def make_client():
 def make_call_model(client, effort="low"):
     """The one line that differs from the scripted example.
 
-    `effort` is low by default because this exists to validate plumbing, not to
-    exercise the model's intelligence — the task is a two-tool lookup. Raise it
-    if you want to watch it reason.
+    `effort` is low by default because this validates plumbing, not the model's
+    intelligence - the task is a two-tool lookup. Raise it to watch it reason.
     """
 
     def call_model(messages, tools):
@@ -114,11 +112,11 @@ _lazy_client = None
 def call_model(messages, tools):
     """The default model call, used when the CLI invokes this agent.
 
-    It must be a real callable at import time — @record wraps the argument
-    before the function body runs, so a `None` sentinel swapped out inside the
-    body would get wrapped instead and blow up on first use. But constructing
-    an Anthropic client at import would demand credentials just to run
-    `--help`. So: a real function that builds its client on first call.
+    It must be a real callable at import time - @record wraps the argument
+    before the body runs, so a `None` sentinel swapped out inside the body
+    would get wrapped instead and blow up on first use. But building a client
+    at import would demand credentials just to run `--help`. So: a real
+    function that builds its client on first call.
     """
     global _lazy_client
     if _lazy_client is None:
@@ -160,7 +158,7 @@ def _run(name, args):
 def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execute_tools):
     """Identical in shape to the scripted example's loop.
 
-    The defaults are what let `retrail fork --agent examples.live_booking_agent:
+    The defaults let `retrail fork --agent examples.live_booking_agent:
     run_agent` call this with only the seeded history.
     """
     while True:
@@ -191,8 +189,8 @@ if __name__ == "__main__":
         [{"role": "user", "content": "Book me a flight from AUS to SFO."}],
         call_model=make_call_model(client),
     )
-    # Not `print`: a real model answers with emoji, and a bare print of that
-    # dies on a cp1252 console. echo() degrades the glyph instead of the run.
+    # Not `print`: a real model answers with emoji, which a bare print dies on
+    # under a cp1252 console. echo() degrades the glyph instead of the run.
     echo(final_text(result))
     echo(f"\nRecorded session {run_agent.last_session_id}")
     echo(f"  retrail log {run_agent.last_session_id}")

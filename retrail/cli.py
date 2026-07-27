@@ -58,11 +58,10 @@ def _console_encoding() -> str:
 def echo(text: object = "") -> None:
     """click.echo, but it cannot be killed by a character.
 
-    Everything retrail prints is downstream of model output: diff shows final
-    answers, bisect shows probe answers, log summarizes content. A real model
-    emits emoji and other non-Latin-1 text freely, and a Windows console
-    defaults to cp1252 -- so an un-encodable character in an ANSWER would take
-    down the command reporting it. Degrading one glyph beats losing the output.
+    Everything retrail prints is downstream of model output, a real model emits
+    emoji freely, and a Windows console defaults to cp1252 - so an un-encodable
+    character in an ANSWER would take down the command reporting it. Degrading
+    one glyph beats losing the output.
     """
     text = str(text)
     encoding = _console_encoding()
@@ -77,8 +76,8 @@ def _glyphs() -> dict[str, str]:
     """Tree glyphs the terminal can actually encode.
 
     Windows consoles default to cp1252, which has no box-drawing characters -
-    printing them raises UnicodeEncodeError and takes down `retrail list`
-    entirely. Degrade to ASCII rather than crash on the happy path.
+    printing them raises UnicodeEncodeError and takes down `retrail list`.
+    Degrade to ASCII rather than crash on the happy path.
     """
     try:
         "└── ├── │   ".encode(_console_encoding())
@@ -90,10 +89,10 @@ def _glyphs() -> dict[str, str]:
 class RetrailGroup(click.Group):
     """Renders retrail's deliberate errors as messages, not tracebacks.
 
-    This lives on the group rather than in main() so it applies however the CLI
-    is entered - console script, `python -m`, or a test harness invoking the
-    group directly. Handling it only in main() meant the errors rendered
-    properly for users and vanished under test, which is exactly backwards.
+    On the group rather than in main() so it applies however the CLI is entered
+    - console script, `python -m`, or a test harness invoking the group
+    directly. Handling it only in main() meant errors rendered properly for
+    users and vanished under test, which is exactly backwards.
     """
 
     def invoke(self, ctx: click.Context) -> Any:
@@ -105,9 +104,9 @@ class RetrailGroup(click.Group):
 
 
 @click.group(cls=RetrailGroup)
-# Read from the package rather than importlib.metadata: a source checkout that
-# was never pip-installed still has to answer `--version`, and that checkout is
-# exactly where a bug report comes from.
+# From the package, not importlib.metadata: a source checkout that was never
+# pip-installed still has to answer `--version`, and that checkout is exactly
+# where a bug report comes from.
 @click.version_option(__version__, "-V", "--version", prog_name="retrail")
 @click.option(
     "--db",
@@ -121,9 +120,9 @@ class RetrailGroup(click.Group):
 def cli(ctx: click.Context, db: str | None) -> None:
     """retrail - git for agent trajectories."""
     ctx.ensure_object(dict)
-    # Both are kept: `init` creates a store *here* and must not be redirected to
-    # a discovered one, the way `git init` always makes a repo in the current
-    # directory while every other command searches upward.
+    # Both are kept: `init` creates a store *here* and must not be redirected
+    # to a discovered one, the way `git init` always makes a repo in the
+    # current directory while every other command searches upward.
     ctx.obj["db_flag"] = db
     ctx.obj["db"] = db or resolve_db_path()
 
@@ -132,9 +131,9 @@ def cli(ctx: click.Context, db: str | None) -> None:
 @click.pass_context
 def init(ctx: click.Context) -> None:
     """Create .retrail/ and the sqlite database in the current directory."""
-    # Deliberately not ctx.obj["db"]: that searches upward, and `init` inside a
-    # project that already has a store would then just reopen the parent's and
-    # report success without creating anything here.
+    # Deliberately not ctx.obj["db"]: that searches upward, so `init` inside a
+    # project that already has a store would reopen the parent's and report
+    # success without creating anything here.
     path = ctx.obj["db_flag"] or default_db_path()
     existed = os.path.exists(path)
     shadowed = None if existed else find_db_path()
@@ -147,9 +146,9 @@ def init(ctx: click.Context) -> None:
 
     echo(f"Initialized empty retrail store: {path}")
     if shadowed:
-        # Creating a store beneath an existing one is legal but is almost never
-        # what someone means, and the symptom - "my sessions vanished" - points
-        # nowhere near the cause. Say it once, here, where it is still cheap.
+        # Legal, but almost never what someone means, and the symptom - "my
+        # sessions vanished" - points nowhere near the cause. Say it here,
+        # where it is still cheap.
         echo(
             f"note: a store already exists above this directory at {shadowed}\n"
             "      commands run here will now use the new one. Delete this "
@@ -201,9 +200,9 @@ def list_sessions(ctx: click.Context) -> None:
 def _session_line(store: Store, session: Session) -> str:
     own = len(store.steps_for(session["id"]))
     if session["parent_session_id"]:
-        # A fork's own steps are only its re-executed suffix. Reporting that as
-        # "3 steps" understates the trajectory, which is what you actually diff
-        # and bisect over - so report both.
+        # A fork's own steps are only its re-executed suffix, so reporting that
+        # alone understates the trajectory - which is what you diff and bisect
+        # over. Report both.
         total = len(trajectory(store, session["id"]))
         count = f"{total} steps, {own} new"
     else:
@@ -282,8 +281,8 @@ def _summarize(step: Step | TrajectoryEntry) -> str:
         stop = out.get("stop_reason") if isinstance(out, dict) else None
         content = out.get("content") if isinstance(out, dict) else None
         # str(), because a content block is model output and need not carry a
-        # 'type' - and a None in here would take down `retrail log` inside
-        # str.join, which is the same failure shape as the encoding bug.
+        # 'type'; a None here would take down `retrail log` inside str.join -
+        # the same failure shape as the encoding bug.
         kinds = (
             [str(b.get("type", "?")) for b in content if isinstance(b, dict)]
             if isinstance(content, list)
@@ -491,8 +490,8 @@ def bisect(
 ) -> None:
     """Find the earliest step from which the agent could no longer recover.
 
-    Each probe forks the run and re-executes it for real, so this costs real
-    model calls - roughly log2(steps) of them, times --samples.
+    Each probe forks the run and re-executes for real, so this costs real model
+    calls - roughly log2(steps) of them, times --samples.
     """
     target = _load_agent(agent)
     with _store(ctx) as store:
@@ -557,7 +556,7 @@ def _render_bisect(result: BisectResult) -> None:
 def ablate(ctx: click.Context, session_id: str, check: str, agent: str) -> None:
     """Which recorded facts is this run's outcome load-bearing on?
 
-    Perturbs each tool result in turn and re-executes for real, then reports
+    Perturbs each tool result in turn, re-executes for real, and reports
     whether the check flipped. Costs one re-execution per tool_call step.
     """
     target = _load_agent(agent)
@@ -732,8 +731,8 @@ def rerun(
 ) -> None:
     """Re-execute every recorded run against your current code.
 
-    Your recorded runs are the regression suite - nobody has to write test
-    cases. Edit your prompt or swap your model, then run this: it reports which
+    Your recorded runs are the regression suite - nobody writes test cases.
+    Edit your prompt or swap your model, then run this: it reports which
     recorded outcomes your change broke.
     """
     target = _load_agent(agent)
@@ -821,7 +820,7 @@ def _load_agent(spec: str) -> Agent:
 
 def main() -> None:
     # RetrailError is handled by RetrailGroup, so it renders identically here
-    # and under any other entry point.
+    # and under every other entry point.
     cli(obj={})
 
 

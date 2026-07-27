@@ -98,8 +98,8 @@ def test_list_on_an_empty_store(env):
 
 
 def test_glyphs_fall_back_to_ascii_on_a_cp1252_console(monkeypatch):
-    """`retrail list` printed box-drawing characters and crashed the whole
-    command on Windows' default cp1252 console. Never again."""
+    """`retrail list` printed box-drawing characters and crashed outright on
+    Windows' default cp1252 console. Never again."""
 
     class Cp1252Stdout:
         encoding = "cp1252"
@@ -133,16 +133,14 @@ def test_log_show_and_fork_end_to_end(env):
     assert "tool_call" in logged.output
     assert "ran price" in logged.output
 
-    # Grab the tool_call's short sha from the log output.
     tool_line = next(line for line in logged.output.splitlines() if "tool_call" in line)
     sha = tool_line.split()[0]
 
     shown = run("show", sha)
     assert "tool_call" in shown.output
     assert "tool_result" in shown.output
-    # The tool result's content is itself a JSON string, so it shows escaped —
-    # which is honest: that is exactly the bytes the loop put in the history,
-    # and exactly what a patch must target.
+    # The tool result's content is itself a JSON string, so it shows escaped -
+    # honestly so: those are the bytes a patch must target.
     assert r'{\"price\": 450}' in shown.output
 
     edit = tmp_path / "edit.json"
@@ -163,7 +161,6 @@ def test_log_show_and_fork_end_to_end(env):
     assert f"forked from {sha}" in fork_log.output
     assert "replace /output/0/content" in fork_log.output
 
-    # The tree shows the fork hanging off its parent, with what changed.
     tree = run("list")
     assert fork_id in tree.output
     assert "forked from" in tree.output
@@ -236,7 +233,7 @@ def test_diff_of_a_session_with_itself_is_clean(env):
 
 def test_diff_full_flag_expands_the_shared_prefix(env):
     """Without --full the shared prefix collapses to a count; with it, every
-    step is listed. Needs a real divergence — identical runs short-circuit."""
+    step is listed. Needs a real divergence - identical runs short-circuit."""
     run, db, tmp_path = env
     run("init")
     record_a_run(db, tmp_path)
@@ -468,9 +465,9 @@ def test_sweep_rejects_a_values_file_that_is_not_a_list(env):
 
 # -- entry points -------------------------------------------------------------
 #
-# Both of these are promises made in prose elsewhere (`--version` is the first
-# thing anyone types when filing a bug; `python -m` is named in RetrailGroup's
-# own docstring), so both get a test that fails if the promise stops holding.
+# Both are promises made in prose elsewhere (`--version` is the first thing
+# anyone types when filing a bug; `python -m` is named in RetrailGroup's own
+# docstring), so both get a test that fails if the promise stops holding.
 
 
 def test_version_flag_reports_the_package_version():
@@ -511,8 +508,8 @@ def test_package_ships_the_pep561_typed_marker():
 
     Without it, every downstream `from retrail import ...` is typed as Any no
     matter how carefully the package is annotated - so the marker is part of
-    the API, not packaging trivia. Asserted against the INSTALLED package, so
-    an editable install and a wheel are both covered.
+    the API, not packaging trivia. Asserted against the INSTALLED package, to
+    cover an editable install and a wheel alike.
     """
     from pathlib import Path
 

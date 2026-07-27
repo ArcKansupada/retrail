@@ -1,15 +1,14 @@
 """Async agents are refused, because recording one would lie.
 
 A sync wrapper cannot record an `async def`. Calling it only builds a
-coroutine: the body has not run, so the session is stamped `complete` with
-zero steps, and the `except BaseException` that marks a crashed run `failed`
-never sees the failure - it happens later, inside the event loop. The result
-is a run that raised partway through, stored as a successful one.
+coroutine: the body has not run, so the session is stamped `complete` with zero
+steps, and the `except BaseException` that marks a crashed run `failed` never
+sees the failure - it happens later, inside the event loop. The result is a run
+that raised partway through, stored as a successful one.
 
-That is worse than a crash. Every other retrail failure is loud; this one
-would leave a trace that quietly disagrees with what happened, which is the
-one thing the project cannot afford. So it is refused at decoration time,
-before any of it can occur.
+Worse than a crash: every other retrail failure is loud, but this one leaves a
+trace that quietly disagrees with what happened. So it is refused at decoration
+time, before any of it can occur.
 """
 
 import asyncio
@@ -84,8 +83,8 @@ def test_refusing_an_async_call_model_leaves_no_session_behind(store, opening):
 
 
 def test_an_async_callable_object_is_refused_too(store, opening):
-    """`async def __call__` is a shape real SDK clients ship, and it is not a
-    coroutine function - only its `__call__` is."""
+    """`async def __call__` is a shape real SDK clients ship, and such an object
+    is not a coroutine function - only its `__call__` is."""
 
     class AsyncClient:
         async def __call__(self, messages, tools):
@@ -109,11 +108,8 @@ def test_a_sync_agent_is_unaffected(store, opening):
 
 
 def test_the_wrapper_never_returns_a_coroutine(store, opening):
-    """The property the refusal protects, stated directly.
-
-    If this ever fails, a session is being marked complete before the work it
-    describes has happened.
-    """
+    """The property the refusal protects, stated directly. If it fails, a
+    session is being marked complete before the work it describes happened."""
     agent = record(session_name="sync-agent", store=store)(raw_agent)
     result = agent(opening, TOOLS, fake_model, make_executor(450))
     assert not asyncio.iscoroutine(result)

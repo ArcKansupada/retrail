@@ -1,15 +1,15 @@
 """Bisect: localizing which step made a failure inevitable.
 
-The scenario is a transient tool failure — the realistic case where bisect has
+The scenario is a transient tool failure - the realistic case where bisect has
 a non-trivial answer. The first `search_flight` call times out; later calls
 succeed. So:
 
     fork from step 0  -> the tool is called again, now succeeds -> recovered
     fork from step 1  -> the timeout is replayed from the log   -> still broken
 
-The boundary is step 1, the tool_call that captured the timeout. That is only
-findable because forking re-executes for real: replaying stored JSON could
-never produce the recovery at step 0.
+The boundary is step 1, the tool_call that captured the timeout - findable only
+because forking re-executes for real. Replaying stored JSON could never produce
+the recovery at step 0.
 """
 
 import json
@@ -165,7 +165,7 @@ def test_bisect_localizes_the_transient_failure(store, broken_run):
 
 
 def test_bisect_probes_are_real_re_executions_recorded_as_sessions(store, broken_run):
-    """Every probe is auditable — you can `retrail log` any of them.
+    """Every probe is auditable - you can `retrail log` any of them.
 
     That matters because the binary search assumes monotonicity, which a real
     model does not strictly guarantee. The probes are the evidence.
@@ -186,7 +186,7 @@ def test_bisect_probes_are_real_re_executions_recorded_as_sessions(store, broken
 
 
 def test_bisect_recovers_when_forked_from_the_start(store, broken_run):
-    """The step-0 probe must pass — otherwise the search has no boundary and
+    """The step-0 probe must pass - otherwise the search has no boundary and
     the whole exercise is meaningless."""
     agent, session_id, executor = broken_run
 
@@ -213,7 +213,7 @@ def test_bisect_is_logarithmic(store, broken_run):
 
 
 def test_bisect_reports_an_inherent_failure(store, opening):
-    """A tool that always fails is not localizable to a step — the run was
+    """A tool that always fails is not localizable to a step - the run was
     doomed from the first one. Say so instead of blaming a step."""
 
     def always_broken(response):

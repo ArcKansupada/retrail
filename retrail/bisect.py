@@ -4,28 +4,24 @@ Since a fork is real re-execution, this needs no new primitives: fork from a
 step with no edit, let the agent re-decide from there, and see whether it still
 lands badly. Binary search does the rest.
 
-What it actually finds
-----------------------
-Forking from step N replays steps 0..N and re-runs everything after. So as N
-grows, more of the original (bad) trajectory is baked in and less is left for
-the agent to get right. Bisect finds the boundary: the earliest step from which
-the agent can no longer recover. That step is where the run went wrong.
+Forking from step N replays steps 0..N and re-runs everything after, so as N
+grows more of the original (bad) trajectory is baked in. Bisect finds the
+boundary: the earliest step from which the agent can no longer recover.
 
 `check` describes what a GOOD run looks like, the way a test does. A probe that
 satisfies it recovered; one that doesn't reproduced the failure.
 
 The honest caveat
 -----------------
-Binary search assumes monotonicity - that if the failure reproduces at step N
-it also reproduces at every later step. Replay is exact, so the prefix is not a
-source of noise, but the re-executed suffix is a real model and genuinely
-non-deterministic. A step near the boundary may recover on one run and not the
-next, so a single probe per step can land a step or two off.
+Binary search assumes monotonicity - that a failure reproducing at step N also
+reproduces at every later step. Replay is exact, so the prefix adds no noise,
+but the re-executed suffix is a real model and genuinely non-deterministic: a
+step near the boundary may recover on one run and not the next, so a single
+probe per step can land a step or two off.
 
-This is not papered over: every probe is recorded as its own session, so the
-result is auditable rather than a bare answer to trust. `samples` re-probes each
-candidate and requires unanimity before calling it good, which trades API calls
-for confidence.
+Not papered over - every probe is recorded as its own session, so the result is
+auditable rather than a bare answer to trust, and `samples` re-probes each
+candidate and requires unanimity, trading API calls for confidence.
 """
 
 from __future__ import annotations
@@ -69,8 +65,8 @@ def parse_check(expression: str) -> CheckFunction:
         output not contains 'error'
         output matches '\\$[0-9]+'
 
-    A predicate is data the CLI can accept; a Python callable is the escape
-    hatch for anything this doesn't express - same split as the fork edit API.
+    A predicate is data the CLI can accept; a callable is the escape hatch for
+    anything this doesn't express - same split as the fork edit API.
     """
     match = _CHECK.match(expression)
     if not match:
@@ -100,17 +96,17 @@ def parse_check(expression: str) -> CheckFunction:
     def check(answer: str | None) -> bool:
         return not test(answer) if negate else test(answer)
 
-    # A plain function has no `expression` attribute statically; CheckFunction
-    # is the protocol that says the returned object does.
+    # A plain function has no `expression` statically; CheckFunction is the
+    # protocol that says the returned object does.
     check.expression = expression  # type: ignore[attr-defined]
     return cast(CheckFunction, check)
 
 
 def describe_check(check: Callable[..., Any]) -> str:
-    """How a result should name the check it applied.
+    """How a result names the check it applied.
 
-    A parsed check reports its source expression; a user's callable reports its
-    name. Neither should ever surface as `<function check at 0x7f...>`.
+    A parsed check reports its expression, a user's callable its name; neither
+    should ever surface as `<function check at 0x7f...>`.
     """
     return str(getattr(check, "expression", getattr(check, "__name__", "<callable>")))
 
@@ -118,8 +114,8 @@ def describe_check(check: Callable[..., Any]) -> str:
 def forkable_steps(store: Store, session_id: str) -> list[Step]:
     """Steps we can honestly resume from.
 
-    A trailing tool_call is excluded: the message state after it was never
-    observed, so there is nothing to replay. See fork.py.
+    A trailing tool_call is excluded: the state after it was never observed, so
+    there is nothing to replay. See fork.py.
     """
     steps = store.steps_for(session_id)
     if steps and steps[-1]["step_type"] == "tool_call":

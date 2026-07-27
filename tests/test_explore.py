@@ -7,9 +7,9 @@ searches a fare, checks the budget, then books:
     check_budget   -> advisory only; this agent ignores the verdict.
     book_flight    -> produces the confirmation the check looks for.
 
-So `check_budget` is genuinely NOT load-bearing, and ablation must say so.
-A tool that merely *ran* is not a tool that *mattered* — separating those is the
-entire point, and it is what attribution-based blame could never establish.
+So `check_budget` is genuinely NOT load-bearing, and ablation must say so. A
+tool that merely *ran* is not a tool that *mattered*, and separating those is
+what attribution-based blame could never do.
 """
 
 import json
@@ -38,8 +38,8 @@ def call_model(messages, tools=None):
         return _reply("toolu_budget", "check_budget", {"amount": payload["fare"]})
 
     if latest["tool_use_id"] == "toolu_budget":
-        # Deliberately ignores the budget verdict and re-reads the fare from
-        # history. This is what makes check_budget non-load-bearing.
+        # Ignores the budget verdict and re-reads the fare from history. This
+        # is what makes check_budget non-load-bearing.
         fare = _fare_in(messages)
         if fare is None or fare > BUDGET:
             return _text(f"Fare of ${fare} is over budget. Not booking.")
@@ -171,8 +171,8 @@ def test_every_probe_is_a_recorded_session(store, agent, recorded):
 
 
 def test_the_default_perturbation_blanks_every_result_in_a_step(store, agent, recorded):
-    """A step with parallel tool calls must be fully ablated, not just its
-    first result - otherwise the probe silently under-perturbs."""
+    """A step with parallel tool calls must be fully ablated, not just its first
+    result - otherwise the probe silently under-perturbs."""
     from retrail.explore import _default_perturbation
 
     step = {"output": [{"content": "a"}, {"content": "b"}, {"content": "c"}]}
@@ -225,7 +225,7 @@ def test_a_probe_that_breaks_the_agent_is_reported_not_raised(store, agent, reco
 def test_ablate_refuses_a_session_with_no_tool_calls(store, opening):
     """A run with no recorded facts has nothing to ablate.
 
-    The check must PASS here, or the baseline guard fires first and this tests
+    The check must PASS here, or the baseline guard fires first and this pins
     the wrong refusal.
     """
 
@@ -320,9 +320,9 @@ def test_ablate_refuses_when_the_baseline_check_fails(store, agent, recorded):
     """Ablate and bisect are duals; each must refuse the other's job.
 
     With a failing baseline every probe reports "outcome held" and gets
-    labelled NOT load-bearing -- which reads as reassuring and is vacuous,
-    because the run was broken throughout. A live run hit exactly this when the
-    check said 'Confirmed' but the model wrote 'Confirmation code'.
+    labelled NOT load-bearing - reassuring, and vacuous. A live run hit exactly
+    this when the check said 'Confirmed' but the model wrote 'Confirmation
+    code'.
     """
     with pytest.raises(RetrailError, match="no good outcome to ablate") as exc:
         ablate(
@@ -336,8 +336,7 @@ def test_ablate_refuses_when_the_baseline_check_fails(store, agent, recorded):
 
 
 def test_ablate_and_bisect_refuse_opposite_baselines(store, agent, recorded, opening):
-    """The duality, asserted directly: whichever tool you reach for, exactly
-    one of them will take the job."""
+    """The duality asserted directly: exactly one tool takes the job."""
     from retrail.bisect import bisect
 
     # This run PASSES the check: ablate accepts it, bisect refuses it.
