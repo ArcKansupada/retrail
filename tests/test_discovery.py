@@ -1,13 +1,13 @@
 """Which database a command uses.
 
-The bug these pin down was quiet and expensive: `.retrail/` resolved against
-the current working directory and nothing else, so `retrail log` run one
+The bug these pin down was quiet and expensive: `.retrial/` resolved against
+the current working directory and nothing else, so `retrial log` run one
 directory down created a second, empty store and truthfully reported no
 sessions - while the real trace sat one level up. Recording split the same way,
 and the halves could disagree without either erroring.
 
 Discovery now searches upward, like git. These tests cover the search, its
-precedence against $RETRAIL_DB and --db, and the one command that must NOT
+precedence against $RETRIAL_DB and --db, and the one command that must NOT
 search: `init`.
 """
 
@@ -17,9 +17,9 @@ import pytest
 from click.testing import CliRunner
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import record
-from retrail.cli import cli
-from retrail.storage import (
+from retrial import record
+from retrial.cli import cli
+from retrial.storage import (
     ENV_VAR,
     Store,
     default_db_path,
@@ -30,15 +30,15 @@ from retrail.storage import (
 
 @pytest.fixture(autouse=True)
 def clean_environment(monkeypatch):
-    """No inherited RETRAIL_DB, and no store cached from another test.
+    """No inherited RETRIAL_DB, and no store cached from another test.
 
     `record` keeps one Store per path for the life of the process, so without
     this a connection cached from a previous test's tmp_path decides the result.
     """
     monkeypatch.delenv(ENV_VAR, raising=False)
-    # importlib, because `retrail.record` the attribute is the decorator:
+    # importlib, because `retrial.record` the attribute is the decorator:
     # __init__ re-exports it over the submodule of the same name.
-    record_module = importlib.import_module("retrail.record")
+    record_module = importlib.import_module("retrial.record")
 
     def drop():
         for store in record_module._default_stores.values():
@@ -52,7 +52,7 @@ def clean_environment(monkeypatch):
 
 def make_store(directory):
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / ".retrail" / "sessions.db"
+    path = directory / ".retrial" / "sessions.db"
     Store(str(path)).close()
     return path
 
@@ -142,7 +142,7 @@ def test_cli_from_a_subdirectory_reads_the_project_store(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "recorded-at-the-root" in result.output
     # The old behaviour: a second empty store, and "No sessions recorded yet."
-    assert not (sub / ".retrail").exists()
+    assert not (sub / ".retrial").exists()
 
 
 def test_recording_from_a_subdirectory_writes_to_the_project_store(
@@ -157,7 +157,7 @@ def test_recording_from_a_subdirectory_writes_to_the_project_store(
     agent = record(session_name="launched-from-a-subdirectory")(raw_agent)
     agent(opening, TOOLS, fake_model, make_executor(450))
 
-    assert not (sub / ".retrail").exists()
+    assert not (sub / ".retrial").exists()
     with Store(str(db)) as store:
         assert [s["name"] for s in store.list_sessions()] == [
             "launched-from-a-subdirectory"
@@ -192,7 +192,7 @@ def test_init_creates_here_even_when_a_store_exists_above(tmp_path, monkeypatch)
 
     result = run("init")
     assert result.exit_code == 0, result.output
-    assert (sub / ".retrail" / "sessions.db").is_file()
+    assert (sub / ".retrial" / "sessions.db").is_file()
 
 
 def test_init_warns_when_it_shadows_a_store_above(tmp_path, monkeypatch):

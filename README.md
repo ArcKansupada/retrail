@@ -1,13 +1,13 @@
-# retrail
+# retrial
 
 **Git for agent trajectories.** Branch, diff, and bisect LLM agent runs — backed by real re-execution, not static logs.
 
-When an agent does something wrong, the only debugging tool most people have is scrolling through logs. retrail lets you go back to step N, change one fact — a tool result, a retrieved doc, an intermediate decision — and see what your agent *actually would have done differently* from there. With the real model. Not a guess.
+When an agent does something wrong, the only debugging tool most people have is scrolling through logs. retrial lets you go back to step N, change one fact — a tool result, a retrieved doc, an intermediate decision — and see what your agent *actually would have done differently* from there. With the real model. Not a guess.
 
 ```bash
-retrail fork a1b2c3d --agent myapp.agent:run_agent --edit-file edit.json
-retrail diff s_a8d4f64945 s_3f9c02ab1e
-retrail bisect s_cc6b0dc420 --check "output contains 'confirmed'" --agent myapp.agent:run_agent
+retrial fork a1b2c3d --agent myapp.agent:run_agent --edit-file edit.json
+retrial diff s_a8d4f64945 s_3f9c02ab1e
+retrial bisect s_cc6b0dc420 --check "output contains 'confirmed'" --agent myapp.agent:run_agent
 ```
 
 ## Why this is different
@@ -15,11 +15,11 @@ retrail bisect s_cc6b0dc420 --check "output contains 'confirmed'" --agent myapp.
 - **Real re-execution, not log branching.** Forking re-enters your live agent loop and makes real model calls from the fork point onward. It does not relabel stored JSON and call it a branch.
 - **Zero-export integration.** A decorator, not a manual JSON schema to hand-build.
 - **Narrow and deep.** One thing — branch/diff/bisect via real execution — done well.
-- **Python-native**, local-first. No account, no telemetry, no dashboard. One SQLite file in `.retrail/`.
+- **Python-native**, local-first. No account, no telemetry, no dashboard. One SQLite file in `.retrial/`.
 
 ## Status
 
-Early but complete end to end: record, fork, diff, and bisect all work, and all four are **validated against `claude-opus-4-8`**, not just a stand-in. Forking a real $450 booking with a $1,450 fare spliced in makes Opus decline to book, explain the budget breach, and never call `book_flight` — a path the original never took. See [the design doc](retrail-design-doc.md).
+Early but complete end to end: record, fork, diff, and bisect all work, and all four are **validated against `claude-opus-4-8`**, not just a stand-in. Forking a real $450 booking with a $1,450 fare spliced in makes Opus decline to book, explain the budget breach, and never call `book_flight` — a path the original never took. See [the design doc](retrial-design-doc.md).
 
 **Fastest way in:** the [60-second tour](examples/README.md) — a toy booking agent you can fork, diff, and bisect with **no API key**.
 
@@ -36,10 +36,10 @@ pip install -e .
 
 ## Integrate
 
-retrail needs two integration points from your loop: the function that calls the model, and the function that executes tool calls. You pass both in explicitly — there's no monkey-patching of your SDK client, so every recorded step traces back to a line you wrote.
+retrial needs two integration points from your loop: the function that calls the model, and the function that executes tool calls. You pass both in explicitly — there's no monkey-patching of your SDK client, so every recorded step traces back to a line you wrote.
 
 ```python
-from retrail import record
+from retrial import record
 
 @record(session_name="booking-agent")
 def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execute_tools):
@@ -53,18 +53,18 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
 
 **The one non-negotiable convention: `messages` must be a parameter**, not a blank list created inside the function. That's what lets a fork seed your loop with edited history and get genuine re-execution instead of a fresh run. Everything else is a normal Python function.
 
-Give the other parameters defaults if you want to fork from the CLI — that's what lets `retrail fork` call your agent with just the seeded history.
+Give the other parameters defaults if you want to fork from the CLI — that's what lets `retrial fork` call your agent with just the seeded history.
 
 Then run it as usual. Steps are logged as the loop runs; there is no export step.
 
-**The loop must be synchronous.** `@record` refuses an `async def` agent, and refuses an async `call_model` or `execute_tools`, with an error explaining why rather than recording something untrue: calling an async function returns a coroutine without running its body, so retrail would mark the session complete before your loop had taken a step, and a run that later failed would be stored as a successful one. If your loop is async today, wrap it in a synchronous function that calls `asyncio.run` and decorate that. An async-aware recorder is planned.
+**The loop must be synchronous.** `@record` refuses an `async def` agent, and refuses an async `call_model` or `execute_tools`, with an error explaining why rather than recording something untrue: calling an async function returns a coroutine without running its body, so retrial would mark the session complete before your loop had taken a step, and a run that later failed would be stored as a successful one. If your loop is async today, wrap it in a synchronous function that calls `asyncio.run` and decorate that. An async-aware recorder is planned.
 
 ## Fork
 
 Every step gets a content-hash SHA, so you address one by a short, copy-pasteable string — the same UX as git's short hashes, prefix matching included.
 
 ```bash
-$ retrail log s_a8d4f64945
+$ retrial log s_a8d4f64945
 session s_a8d4f64945  (booking-agent)
   status: complete
 
@@ -82,14 +82,14 @@ What if that flight had cost $1200 instead of $450?
 $ cat edit.json
 {"op": "replace", "path": "/output/0/content", "value": "{\"flight_price\": 1200}"}
 
-$ retrail fork a1b2c3d --agent examples.booking_agent:run_agent --edit-file edit.json
+$ retrial fork a1b2c3d --agent examples.booking_agent:run_agent --edit-file edit.json
 Forked into session s_3f9c02ab1e
 ```
 
 The fork resumes your real loop from that point with the edited fact spliced in. The model decides again, and can take a path the original never took:
 
 ```bash
-$ retrail list
+$ retrial list
 s_a8d4f64945  booking-agent  (3 steps, complete)
 └── s_3f9c02ab1e  booking-agent-fork  (3 steps, complete)  forked from a1b2c3d [replace /output/0/content = "{\"flight_price\": 1200}"]
 ```
@@ -98,12 +98,12 @@ The original session is never mutated — a fork is a new session row, so you ca
 
 ### Editing
 
-The `edit` is a JSON patch, which is what lets `retrail log` show not just *where* you forked but *what* you changed. Two forks from the same step with opposite edits are otherwise indistinguishable.
+The `edit` is a JSON patch, which is what lets `retrial log` show not just *where* you forked but *what* you changed. Two forks from the same step with opposite edits are otherwise indistinguishable.
 
 For edits that depend on the recorded content — double the price, truncate a document — the Python API also takes a callback:
 
 ```python
-from retrail import fork
+from retrial import fork
 
 fork(
     from_sha="a1b2c3d",
@@ -112,12 +112,12 @@ fork(
 )
 ```
 
-Callback forks work and are recorded, but they don't round-trip from the record alone — retrail stores that a callback ran, not what it did. Prefer a patch when you can.
+Callback forks work and are recorded, but they don't round-trip from the record alone — retrial stores that a callback ran, not what it did. Prefer a patch when you can.
 
 ## Diff
 
 ```bash
-$ retrail diff s_23f11ef6dd s_afbdbacc45
+$ retrial diff s_23f11ef6dd s_afbdbacc45
 common ancestor: s_23f11ef6dd
 shared prefix:   1 step(s), through 578922a
 
@@ -148,7 +148,7 @@ Steps are aligned on a signature folding in the step type, the tool name, and a 
 Which step made a failure inevitable?
 
 ```bash
-$ retrail bisect s_cc6b0dc420 --check "output contains 'Confirmed'" \
+$ retrial bisect s_cc6b0dc420 --check "output contains 'Confirmed'" \
     --agent examples.booking_agent:run_agent
 
   probe step 2 (126fdf9): recovered     -> 'Confirmed: AUS-SFO booked for $450...'
@@ -165,14 +165,14 @@ Each probe forks the run and re-executes it for real, then checks the outcome. R
 
 `--check` describes what a **good** run looks like, like a test. Also: `output not contains '...'`, `output matches '<regex>'`, or any callable via the Python API.
 
-Bisect costs roughly `log2(steps)` real re-executions. Binary search assumes the good/bad boundary is clean, which a non-deterministic model doesn't strictly guarantee — so every probe is recorded as its own session you can `retrail log`, and `--samples N` re-probes each step and requires unanimity before calling it recovered.
+Bisect costs roughly `log2(steps)` real re-executions. Binary search assumes the good/bad boundary is clean, which a non-deterministic model doesn't strictly guarantee — so every probe is recorded as its own session you can `retrial log`, and `--samples N` re-probes each step and requires unanimity before calling it recovered.
 
 ## Ablate
 
 Which recorded facts is a good answer actually load-bearing on? Don't infer it from the text — **perturb each fact and find out**.
 
 ```bash
-$ retrail ablate s_a8d4... --check "output contains 'QX7R2M'" --agent myapp.agent:run_agent
+$ retrial ablate s_a8d4... --check "output contains 'QX7R2M'" --agent myapp.agent:run_agent
 
   step 1 (eec0274) search_flight: outcome FLIPPED   -> possibly load-bearing
   step 3 (0725654) book_flight:   outcome FLIPPED   -> possibly load-bearing
@@ -190,7 +190,7 @@ $ retrail ablate s_a8d4... --check "output contains 'QX7R2M'" --agent myapp.agen
 Fork one step across N values to find a threshold.
 
 ```bash
-$ retrail sweep eec0274 --values-file fares.json --check "output contains 'QX7R2M'" \
+$ retrial sweep eec0274 --values-file fares.json --check "output contains 'QX7R2M'" \
     --agent myapp.agent:run_agent
 
   {"fare_usd": 200}:  PASS -> 'Your flight is booked! ... $200 (well under your $600 budget)'
@@ -214,7 +214,7 @@ A real model rewords itself on every run. Comparing answers by text equality wou
 Nobody writes the test cases. They're just what your agent already did. Edit a prompt or swap a model, then re-execute every recorded run against your **current code**:
 
 ```bash
-$ retrail rerun --check "output contains 'QX7R2M'" --at-tool search_flight \
+$ retrial rerun --check "output contains 'QX7R2M'" --at-tool search_flight \
     --agent myapp.agent:run_agent
 
 re-executing 40 recorded run(s) against current code
@@ -230,7 +230,7 @@ re-executing 40 recorded run(s) against current code
 REGRESSED  s_3ca5a1df75  (resumed at eec0274)
   was: Your flight is booked! Confirmation code: QX7R2M
   now: The fare of $450 exceeds your $300 limit, so I won't book it.
-  retrail diff s_3ca5a1df75 s_9c1e04b7a2
+  retrial diff s_3ca5a1df75 s_9c1e04b7a2
 ```
 
 Exits non-zero on a regression, so CI fails without extra plumbing.
@@ -260,7 +260,7 @@ Resuming at the last tool call lands on `book_flight` — by then the booking al
 ## Cost
 
 ```bash
-$ retrail cost s_3ca5a1df75
+$ retrial cost s_3ca5a1df75
   step  sha           ms   tokens        cost
      0  ad8e658     2745      713    $0.00562
      2  e0bf5d9     2028      872    $0.00686
@@ -275,19 +275,19 @@ An unknown model prices as `unpriced`, never as a guess — and a partial total 
 
 ## What isn't here, deliberately
 
-**Merge was cut, not deferred.** This is where the git metaphor stops paying rent. Git merges because branches are *work that must be combined* — the merged artifact is what ships. retrail's branches are *questions being asked*, and two forks are usually competing hypotheses of which at most one is true. Merging "the fare was $450" with "the fare was $1,450" feeds the model contradictory facts: not a better-informed run, a confused one. Answers don't merge. Full reasoning in [the design doc](retrail-design-doc.md) §6.6.
+**Merge was cut, not deferred.** This is where the git metaphor stops paying rent. Git merges because branches are *work that must be combined* — the merged artifact is what ships. retrial's branches are *questions being asked*, and two forks are usually competing hypotheses of which at most one is true. Merging "the fare was $450" with "the fare was $1,450" feeds the model contradictory facts: not a better-informed run, a confused one. Answers don't merge. Full reasoning in [the design doc](retrial-design-doc.md) §6.6.
 
 **Blame-by-attribution was cut too** — replaced by `ablate`, which answers the same question causally instead of heuristically.
 
-## What retrail refuses to do
+## What retrial refuses to do
 
-The whole product rests on the replay being exactly what happened, so retrail raises rather than guesses when it can't verify that:
+The whole product rests on the replay being exactly what happened, so retrial raises rather than guesses when it can't verify that:
 
-- If your loop **transforms a tool result** before appending it to the history, retrail refuses to fork that step — its patch would land on a value you never saw.
+- If your loop **transforms a tool result** before appending it to the history, retrial refuses to fork that step — its patch would land on a value you never saw.
 - If an edit **invents or drops** a tool result the original run never produced, it refuses — there's no honest place in the recorded history to put it.
 - If a run **crashed mid-loop**, its trailing tool call can't be forked: the message state after it was never observed.
 - If your agent or its model call is **async**, it refuses to record at all rather than stamp a session `complete` before the loop has run a step.
-- If the database was written by a **newer retrail**, it refuses to open it rather than write rows that version may not read back.
+- If the database was written by a **newer retrial**, it refuses to open it rather than write rows that version may not read back.
 - If an imported step's **content doesn't match its SHA**, it refuses — a trace that changed in transit is not a recording. Same for a file that would **merge two different runs** under one session ID.
 
 A wrong replay would be worse than no replay.
@@ -295,42 +295,42 @@ A wrong replay would be worse than no replay.
 ## CLI
 
 ```
-retrail init                                   # create .retrail/ + sqlite db
-retrail list                                   # sessions, tree view
-retrail log <session-id>                       # step-by-step history, SHA per step
-retrail show <sha>                             # full detail on one step
-retrail fork <sha> --agent M:F --edit-file e.json
-retrail diff <session-a> <session-b>           # --full to expand shared steps
-retrail bisect <session-id> --check EXPR --agent M:F   # which step doomed a failed run
-retrail ablate <session-id> --check EXPR --agent M:F   # which facts a good run needed
-retrail sweep <sha> --values-file v.json --agent M:F   # find a threshold; --check optional
-retrail rerun --check EXPR --agent M:F                 # regression-test recorded runs
-retrail cost <session-id>                              # cost/token breakdown per step
-retrail export <session-id> > trace.jsonl             # a session + its ancestors, portable
-retrail import trace.jsonl                            # read one back, all of it or none
+retrial init                                   # create .retrial/ + sqlite db
+retrial list                                   # sessions, tree view
+retrial log <session-id>                       # step-by-step history, SHA per step
+retrial show <sha>                             # full detail on one step
+retrial fork <sha> --agent M:F --edit-file e.json
+retrial diff <session-a> <session-b>           # --full to expand shared steps
+retrial bisect <session-id> --check EXPR --agent M:F   # which step doomed a failed run
+retrial ablate <session-id> --check EXPR --agent M:F   # which facts a good run needed
+retrial sweep <sha> --values-file v.json --agent M:F   # find a threshold; --check optional
+retrial rerun --check EXPR --agent M:F                 # regression-test recorded runs
+retrial cost <session-id>                              # cost/token breakdown per step
+retrial export <session-id> > trace.jsonl             # a session + its ancestors, portable
+retrial import trace.jsonl                            # read one back, all of it or none
 ```
 
 SHA prefix matching applies throughout. An ambiguous prefix is an error asking for a longer one — same as git.
 
 ### Where the store lives
 
-Commands search upward for `.retrail/` from the current directory, so running one deep inside a project finds the project's store rather than making a new one beside you — the same rule git uses to find `.git/`. In precedence order:
+Commands search upward for `.retrial/` from the current directory, so running one deep inside a project finds the project's store rather than making a new one beside you — the same rule git uses to find `.git/`. In precedence order:
 
 1. `--db PATH` on the command line.
-2. `RETRAIL_DB` in the environment, for pointing a shell or a CI job at one store.
-3. The nearest `.retrail/sessions.db` at or above the current directory.
-4. Otherwise `./.retrail/sessions.db`, created on first use.
+2. `RETRIAL_DB` in the environment, for pointing a shell or a CI job at one store.
+3. The nearest `.retrial/sessions.db` at or above the current directory.
+4. Otherwise `./.retrial/sessions.db`, created on first use.
 
-`retrail init` is the exception: like `git init`, it always creates a store *here*. If that shadows one further up, it says so.
+`retrial init` is the exception: like `git init`, it always creates a store *here*. If that shadows one further up, it says so.
 
 ### Sharing a trace
 
-`retrail export` writes a session and its ancestors to a JSONL file; `retrail import` reads one into another store. This is the collaboration story with no server in it — *here is my trace, fork it yourself and see* — and the only lossless way to keep a session before deleting `.retrail/`.
+`retrial export` writes a session and its ancestors to a JSONL file; `retrial import` reads one into another store. This is the collaboration story with no server in it — *here is my trace, fork it yourself and see* — and the only lossless way to keep a session before deleting `.retrial/`.
 
 ```bash
-retrail export s_ab12cd34ef > trace.jsonl   # the fork plus every ancestor it needs
-retrail export --all -o backup.jsonl        # the whole store
-cat trace.jsonl | retrail import -           # from a pipe, or a path
+retrial export s_ab12cd34ef > trace.jsonl   # the fork plus every ancestor it needs
+retrial export --all -o backup.jsonl        # the whole store
+cat trace.jsonl | retrial import -           # from a pipe, or a path
 ```
 
 A fork travels with its ancestors, because a fork without its parents can't be diffed or replayed. Descendants don't travel — exporting a root doesn't hand over every experiment you ran on top of it.
@@ -340,8 +340,8 @@ Import is safe to repeat. Every step's SHA is recomputed and checked, so a file 
 ## Python API
 
 ```python
-from retrail import record, fork, diff, bisect, ablate, sweep, rerun, trajectory, Store
-from retrail import export, import_   # the same JSONL transfer, in-process
+from retrial import record, fork, diff, bisect, ablate, sweep, rerun, trajectory, Store
+from retrial import export, import_   # the same JSONL transfer, in-process
 ```
 
 `trajectory(store, session_id)` materializes the full path from root to tip, walking the parent chain and tagging each step `replayed` or `live`.
@@ -350,10 +350,10 @@ from retrail import export, import_   # the same JSONL transfer, in-process
 
 ### Typed
 
-retrail ships `py.typed`, so the annotations are visible to your type checker rather than collapsing to `Any` at the import boundary. Every function returns a plain dict — they stay JSON-shaped and printable — but the shapes are declared, so a typo in a key is an error and not a `KeyError` at 3am:
+retrial ships `py.typed`, so the annotations are visible to your type checker rather than collapsing to `Any` at the import boundary. Every function returns a plain dict — they stay JSON-shaped and printable — but the shapes are declared, so a typo in a key is an error and not a `KeyError` at 3am:
 
 ```python
-from retrail import Step, DiffResult, TrajectoryEntry, Session   # and the rest
+from retrial import Step, DiffResult, TrajectoryEntry, Session   # and the rest
 
 result = diff(store, a, b)
 result["divergance"]   # error: TypedDict "DiffResult" has no key "divergance"
@@ -367,9 +367,9 @@ result["divergance"]   # error: TypedDict "DiffResult" has no key "divergance"
 The bundled example ships a scripted model, so you can fork, diff, and bisect with no spend. See the **[60-second tour](examples/README.md)**:
 
 ```bash
-retrail init
+retrial init
 python examples/booking_agent.py
-retrail list
+retrial list
 ```
 
 ## License

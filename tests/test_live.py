@@ -6,7 +6,7 @@ for the assumptions that stand-in cannot check:
   1. the serializer against real Pydantic `Message` objects
   2. real tool_use/tool_result blocks carrying the `tool_use_id` the splice
      matches on
-  3. adaptive thinking blocks surviving a round-trip through retrail's JSON
+  3. adaptive thinking blocks surviving a round-trip through retrial's JSON
   4. that forking is genuinely LIVE - two forks from one SHA can diverge, which
      no deterministic replay could ever produce
 
@@ -25,9 +25,9 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent.parent / "exa
 
 import live_booking_agent as live  # noqa: E402
 
-from retrail import fork, record  # noqa: E402
-from retrail.diff import diff, final_answer  # noqa: E402
-from retrail.trajectory import trajectory  # noqa: E402
+from retrial import fork, record  # noqa: E402
+from retrial.diff import diff, final_answer  # noqa: E402
+from retrial.trajectory import trajectory  # noqa: E402
 
 pytestmark = pytest.mark.live
 
@@ -110,7 +110,7 @@ def test_thinking_blocks_survive_the_round_trip(store, agent, client):
     untested assumption wearing a green tick.
 
     A completed multi-turn run IS the assertion. The loop echoes the whole
-    content list back on the next call, having taken it through retrail's
+    content list back on the next call, having taken it through retrial's
     snapshot -> to_jsonable -> SQLite -> JSON round-trip, and the API rejects a
     thinking block whose signature was altered. So a second model call that
     succeeds proves the round-trip preserved them byte-for-byte.

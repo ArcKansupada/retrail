@@ -119,7 +119,7 @@ def _seed_messages(store: Store, step: Step, edited: dict[str, Any]) -> list[JSO
 
     if step["step_type"] != "tool_call":
         raise ReplayIntegrityError(
-            f"cannot fork a {step['step_type']!r} step; retrail v1 forks "
+            f"cannot fork a {step['step_type']!r} step; retrial v1 forks "
             "model_call and tool_call steps"
         )
 
@@ -153,7 +153,7 @@ def _splice_tool_output(store: Store, step: Step, edited: dict[str, Any]) -> lis
     if added:
         raise ReplayIntegrityError(
             f"edit introduced tool results that were never recorded ({sorted(added)}). "
-            "retrail can only substitute facts the original run actually produced - "
+            "retrial can only substitute facts the original run actually produced - "
             "there is no place in the recorded history to put a new one."
         )
     dropped = set(recorded_by_id) - set(edited_by_id)
@@ -170,7 +170,7 @@ def _splice_tool_output(store: Store, step: Step, edited: dict[str, Any]) -> lis
         if block is None:
             raise ReplayIntegrityError(
                 f"tool result {tool_use_id!r} was recorded but does not appear in "
-                "the message history your loop built. retrail refuses to guess "
+                "the message history your loop built. retrial refuses to guess "
                 "where it went - the replay would no longer be what happened."
             )
         _verify_verbatim(block, recorded_entry, tool_use_id)
@@ -191,7 +191,7 @@ def _by_tool_use_id(results: list[JSON], label: str) -> dict[str, JSON]:
     for entry in results:
         if not isinstance(entry, dict) or "tool_use_id" not in entry:
             raise ReplayIntegrityError(
-                f"{label} tool result {entry!r} has no 'tool_use_id'. retrail "
+                f"{label} tool result {entry!r} has no 'tool_use_id'. retrial "
                 "matches results back into the message history by that id; "
                 "without it the splice cannot be verified."
             )
@@ -221,13 +221,13 @@ def _verify_verbatim(block: JSON, recorded_entry: JSON, tool_use_id: str) -> Non
             raise ReplayIntegrityError(
                 f"tool result {tool_use_id!r}: recorded field {key!r} is missing "
                 "from the message history; your loop transformed the result "
-                "before appending it, so retrail cannot patch it faithfully."
+                "before appending it, so retrial cannot patch it faithfully."
             )
         if block[key] != value:
             raise ReplayIntegrityError(
                 f"tool result {tool_use_id!r}: recorded {key!r} does not match "
                 "what is in the message history. Your loop transformed the result "
-                "between executing the tool and appending it. retrail patches the "
+                "between executing the tool and appending it. retrial patches the "
                 "history verbatim, so it cannot honestly apply your edit here."
             )
 

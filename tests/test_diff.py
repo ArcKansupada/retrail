@@ -5,9 +5,9 @@ import json
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import fork, record
-from retrail.diff import diff, final_answer, signature
-from retrail.trajectory import trajectory
+from retrial import fork, record
+from retrial.diff import diff, final_answer, signature
+from retrial.trajectory import trajectory
 
 PRICE_999 = {
     "op": "replace",

@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         # Every supported version on Linux; the ends of the range on Windows and
-        # macOS. The Windows jobs are not optional - retrail's console-encoding
+        # macOS. The Windows jobs are not optional - retrial's console-encoding
         # handling exists specifically for cp1252 terminals, and it was written
         # after a live run crashed on one.
         include:
@@ -50,8 +50,8 @@ jobs:
 
       - name: Entry points
         run: |
-          retrail --version
-          python -m retrail --version
+          retrial --version
+          python -m retrial --version
 
   console-encoding:
     # The regression this guards against was a UnicodeEncodeError raised while
@@ -70,10 +70,10 @@ jobs:
         run: |
           chcp 1252
           set PYTHONIOENCODING=cp1252
-          retrail init || exit /b 1
-          retrail list || exit /b 1
-          retrail --help || exit /b 1
-          python -m retrail --version || exit /b 1
+          retrial init || exit /b 1
+          retrial list || exit /b 1
+          retrial --help || exit /b 1
+          python -m retrial --version || exit /b 1
 
   lint:
     name: ruff

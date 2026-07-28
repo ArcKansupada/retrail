@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from retrail.errors import ExportFormatError
-from retrail.portable import (
+from retrial.errors import ExportFormatError
+from retrial.portable import (
     FORMAT_VERSION,
     dump_document,
     dump_line,

@@ -1,9 +1,9 @@
-"""`retrail export` and `retrail import` at the command line.
+"""`retrial export` and `retrial import` at the command line.
 
 Two things here are not obvious from the library tests. An export is *data*,
 so it must not go through the console-degrading `echo()` that everything else
 uses - a replaced character would change a step's content and break its own
-sha. And diagnostics belong on stderr, so `retrail export s_x | gh gist
+sha. And diagnostics belong on stderr, so `retrial export s_x | gh gist
 create -` sends a file rather than a file with a note in it.
 """
 
@@ -15,9 +15,9 @@ import pytest
 from click.testing import CliRunner
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import fork, record
-from retrail.cli import cli, write_data
-from retrail.storage import Store
+from retrial import fork, record
+from retrial.cli import cli, write_data
+from retrial.storage import Store
 
 PRICE_999 = {
     "op": "replace",
@@ -29,8 +29,8 @@ PRICE_999 = {
 @pytest.fixture
 def project(tmp_path, opening, monkeypatch):
     """A store on disk with a root run and a fork, plus its path."""
-    monkeypatch.delenv("RETRAIL_DB", raising=False)
-    db = tmp_path / "src" / ".retrail" / "sessions.db"
+    monkeypatch.delenv("RETRIAL_DB", raising=False)
+    db = tmp_path / "src" / ".retrial" / "sessions.db"
     store = Store(str(db))
     agent = record(session_name="root-run", store=store)(raw_agent)
     agent(opening, TOOLS, fake_model, make_executor(450))
@@ -151,8 +151,8 @@ def test_export_writes_utf8_whatever_the_console_is(monkeypatch):
 
 def test_a_trace_with_non_ascii_survives_the_round_trip(tmp_path, opening, monkeypatch):
     """End to end, because the sha is what makes this checkable at all."""
-    monkeypatch.delenv("RETRAIL_DB", raising=False)
-    source_db = tmp_path / "a" / ".retrail" / "sessions.db"
+    monkeypatch.delenv("RETRIAL_DB", raising=False)
+    source_db = tmp_path / "a" / ".retrial" / "sessions.db"
     store = Store(str(source_db))
     session = store.create_session(name="unicode-run")
     store.add_step(
@@ -168,7 +168,7 @@ def test_a_trace_with_non_ascii_survives_the_round_trip(tmp_path, opening, monke
     path = tmp_path / "trace.jsonl"
     assert run("--db", str(source_db), "export", session, "-o", str(path)).exit_code == 0
 
-    target_db = tmp_path / "b" / ".retrail" / "sessions.db"
+    target_db = tmp_path / "b" / ".retrial" / "sessions.db"
     result = run("--db", str(target_db), "import", str(path))
     assert result.exit_code == 0, result.output
 
@@ -183,7 +183,7 @@ def test_a_trace_with_non_ascii_survives_the_round_trip(tmp_path, opening, monke
 
 def test_import_reads_a_file(project, tmp_path):
     path = export_to(project, "--all")
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run("--db", str(target), "import", str(path))
 
@@ -195,7 +195,7 @@ def test_import_reads_a_file(project, tmp_path):
 
 def test_import_reads_stdin(project, tmp_path):
     path = export_to(project, "--all")
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run(
         "--db", str(target), "import", "-", input=path.read_text(encoding="utf-8")
@@ -218,7 +218,7 @@ def test_a_file_with_a_utf8_bom_still_imports(project, tmp_path):
         body = handle.read()
     bom_path = tmp_path / "with_bom.jsonl"
     bom_path.write_bytes(b"\xef\xbb\xbf" + body)
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run("--db", str(target), "import", str(bom_path))
 
@@ -231,7 +231,7 @@ def test_a_bom_on_stdin_still_imports(project, tmp_path):
     path = export_to(project, "--all")
     with open(path, "rb") as handle:
         piped = ("\ufeff" + handle.read().decode("utf-8"))
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run("--db", str(target), "import", "-", input=piped)
 
@@ -242,7 +242,7 @@ def test_a_bom_on_stdin_still_imports(project, tmp_path):
 
 def test_importing_twice_says_nothing_changed(project, tmp_path):
     path = export_to(project, "--all")
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
     run("--db", str(target), "import", str(path))
 
     result = run("--db", str(target), "import", str(path))
@@ -259,7 +259,7 @@ def test_a_tampered_file_is_refused_with_a_message(project, tmp_path):
     path.write_text(
         "".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8"
     )
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run("--db", str(target), "import", str(path))
 
@@ -274,7 +274,7 @@ def test_the_error_names_the_file_and_line(project, tmp_path):
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
     lines[2] = "{ not json\n"
     path.write_text("".join(lines), encoding="utf-8")
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
 
     result = run("--db", str(target), "import", str(path))
 
@@ -285,7 +285,7 @@ def test_the_error_names_the_file_and_line(project, tmp_path):
 def test_an_imported_trace_is_visible_to_the_other_commands(project, tmp_path):
     """The point of importing: `list`, `log` and `diff` all work on it."""
     path = export_to(project, "--all")
-    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+    target = tmp_path / "dest" / ".retrial" / "sessions.db"
     run("--db", str(target), "import", str(path))
 
     listed = run("--db", str(target), "list")

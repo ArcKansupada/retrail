@@ -3,8 +3,8 @@ from dataclasses import dataclass
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import record
-from retrail.errors import IntegrationError
+from retrial import record
+from retrial.errors import IntegrationError
 
 
 def test_records_the_whole_loop_with_a_sha_per_step(store, opening):
@@ -148,7 +148,7 @@ def test_a_non_callable_interception_point_fails_at_the_boundary(store, opening)
 
     So a `None` sentinel meant to be swapped out inside the body gets wrapped
     instead and dies as "'NoneType' object is not callable" several frames deep
-    in retrail. A live agent hit exactly that. Fail where the mistake is.
+    in retrial. A live agent hit exactly that. Fail where the mistake is.
     """
     agent = record(session_name="booking", store=store)(raw_agent)
 
@@ -163,7 +163,7 @@ def test_a_rejected_call_does_not_strand_an_empty_session(store, opening):
     """Validation must happen before the store is touched.
 
     A live fork crashed on a non-callable model arg and left an orphaned
-    session row behind, which then showed up in `retrail list` and got picked
+    session row behind, which then showed up in `retrial list` and got picked
     up by a diff.
     """
     agent = record(session_name="booking", store=store)(raw_agent)

@@ -1,4 +1,4 @@
-"""Measure what retrail actually costs and actually saves.
+"""Measure what retrial actually costs and actually saves.
 
 Every number here is measured, not modelled. Where a figure depends on an
 assumption (trajectory length, model latency), the assumption is printed next
@@ -17,11 +17,11 @@ import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
-from retrail import record  # noqa: E402
-from retrail.bisect import forkable_steps  # noqa: E402
-from retrail.storage import Store  # noqa: E402
+from retrial import record  # noqa: E402
+from retrial.bisect import forkable_steps  # noqa: E402
+from retrial.storage import Store  # noqa: E402
 
-# --- a scripted agent, so we measure retrail and not the network ------------
+# --- a scripted agent, so we measure retrial and not the network ------------
 
 
 def make_agent_parts(steps):
@@ -196,7 +196,7 @@ def live_latency():
     Overhead as a percentage is meaningless against a scripted model that
     returns instantly, so anchor it to a real measurement when one exists.
     """
-    db = pathlib.Path(".retrail/sessions.db")
+    db = pathlib.Path(".retrial/sessions.db")
     if not db.exists():
         return None
     store = Store(str(db))
@@ -212,7 +212,7 @@ def live_latency():
 
 def main():
     print("=" * 72)
-    print("retrail benchmarks")
+    print("retrial benchmarks")
     print("=" * 72)
 
     o = bench_recording_overhead()

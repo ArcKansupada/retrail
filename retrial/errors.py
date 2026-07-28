@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 
-class RetrailError(Exception):
-    """Base class for every error retrail raises deliberately."""
+class RetrialError(Exception):
+    """Base class for every error retrial raises deliberately."""
 
 
-class NotFound(RetrailError):
+class NotFound(RetrialError):
     pass
 
 
-class AmbiguousSha(RetrailError):
+class AmbiguousSha(RetrialError):
     """A SHA prefix matched more than one step.
 
     Resolved the way git resolves it: refuse and ask for a longer prefix.
@@ -28,7 +28,7 @@ class AmbiguousSha(RetrailError):
         )
 
 
-class ReplayIntegrityError(RetrailError):
+class ReplayIntegrityError(RetrialError):
     """The recorded state cannot be replayed faithfully.
 
     Raised instead of guessing. The entire product rests on the replay being
@@ -36,11 +36,11 @@ class ReplayIntegrityError(RetrailError):
     """
 
 
-class IntegrationError(RetrailError):
+class IntegrationError(RetrialError):
     """The user's agent function doesn't meet the integration contract."""
 
 
-class ExportFormatError(RetrailError):
+class ExportFormatError(RetrialError):
     """An export file cannot be read as what it claims to be.
 
     Always carries the line, because the failures this covers - a malformed
@@ -63,8 +63,8 @@ class ExportFormatError(RetrailError):
         super().__init__(f"{where}{message}")
 
 
-class SchemaVersionError(RetrailError):
-    """The database on disk was written by a different retrail schema.
+class SchemaVersionError(RetrialError):
+    """The database on disk was written by a different retrial schema.
 
     Refusing is the point. SQLite will happily open a database whose tables
     don't match what the code expects, and the failure then arrives later as a
@@ -78,15 +78,15 @@ class SchemaVersionError(RetrailError):
         self.expected = expected
         if found > expected:
             detail = (
-                f"was written by a newer retrail (schema v{found}); this "
-                f"retrail understands v{expected}. Upgrade with "
-                "`pip install -U retrail`, or point at a different database "
+                f"was written by a newer retrial (schema v{found}); this "
+                f"retrial understands v{expected}. Upgrade with "
+                "`pip install -U retrial`, or point at a different database "
                 "with --db."
             )
         else:
             detail = (
-                f"uses schema v{found}, and this retrail (v{expected}) has no "
-                "migration for it. This is a bug: every version retrail has "
+                f"uses schema v{found}, and this retrial (v{expected}) has no "
+                "migration for it. This is a bug: every version retrial has "
                 "shipped should be readable."
             )
         super().__init__(f"{path} {detail}")

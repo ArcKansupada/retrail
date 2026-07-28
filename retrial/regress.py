@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from .bisect import describe_check, forkable_steps, parse_check
 from .diff import final_answer
-from .errors import RetrailError
+from .errors import RetrialError
 from .fork import fork
 from .pricing import trajectory_cost
 from .trajectory import trajectory
@@ -85,7 +85,7 @@ def _resume_point(
     if where == "last":
         tool_calls = [c for c in candidates if c["step_type"] == "tool_call"]
         return tool_calls[-1] if tool_calls else candidates[0]
-    raise RetrailError(f"--from must be 'first' or 'last', got {where!r}")
+    raise RetrialError(f"--from must be 'first' or 'last', got {where!r}")
 
 
 def rerun(
@@ -105,7 +105,7 @@ def rerun(
 
     targets = sessions or recorded_runs(store)
     if not targets:
-        raise RetrailError(
+        raise RetrialError(
             "no recorded runs to re-execute. Record some agent runs first - "
             "they are the corpus."
         )

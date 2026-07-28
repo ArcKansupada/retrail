@@ -1,7 +1,7 @@
 """The tests that matter: forking is real re-execution, or the thesis is wrong.
 
 `test_fork_matches_counterfactual` is the milestone-0 assertion promoted from a
-throwaway script to a permanent regression test. If it fails, retrail is back
+throwaway script to a permanent regression test. If it fails, retrial is back
 to being a log viewer.
 """
 
@@ -10,8 +10,8 @@ import json
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import fork, record
-from retrail.errors import IntegrationError, ReplayIntegrityError
+from retrial import fork, record
+from retrial.errors import IntegrationError, ReplayIntegrityError
 
 
 def build_agent(store):
@@ -159,7 +159,7 @@ def test_fork_leaves_the_original_session_intact(store, opening):
 
 
 def test_fork_records_provenance(store, opening):
-    """`retrail log` must be able to show where AND what."""
+    """`retrial log` must be able to show where AND what."""
     agent, original_id, _ = run_original(store, opening)
     step = tool_step(store, original_id)
 

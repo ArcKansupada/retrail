@@ -8,7 +8,7 @@ It exercises the paths a scripted model can never reach:
   * `serialize.to_jsonable` against real Pydantic `Message` objects
   * real `tool_use` / `tool_result` blocks carrying the `tool_use_id` that
     fork.py's splice matches on
-  * adaptive thinking blocks surviving a round-trip through retrail's JSON
+  * adaptive thinking blocks surviving a round-trip through retrial's JSON
   * genuine non-determinism - two forks from one SHA can differ, which a
     deterministic stand-in cannot demonstrate
 
@@ -24,7 +24,7 @@ import json
 import os
 import pathlib
 
-from retrail import record
+from retrial import record
 
 MODEL = "claude-opus-4-8"
 
@@ -148,7 +148,7 @@ def _run(name, args):
     if name == "search_flight":
         return {"fare_usd": 450, "carrier": "Southwest", "stops": 0}
     if name == "book_flight":
-        if os.environ.get("RETRAIL_DEMO_OUTAGE"):
+        if os.environ.get("RETRIAL_DEMO_OUTAGE"):
             return {"error": "airline API timed out"}
         return {"confirmation": "QX7R2M", "fare_usd": args.get("fare_usd")}
     return {"error": f"unknown tool {name}"}
@@ -158,7 +158,7 @@ def _run(name, args):
 def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execute_tools):
     """Identical in shape to the scripted example's loop.
 
-    The defaults let `retrail fork --agent examples.live_booking_agent:
+    The defaults let `retrial fork --agent examples.live_booking_agent:
     run_agent` call this with only the seeded history.
     """
     while True:
@@ -182,7 +182,7 @@ def final_text(response):
 
 
 if __name__ == "__main__":
-    from retrail.cli import echo
+    from retrial.cli import echo
 
     client = make_client()
     result = run_agent(
@@ -193,4 +193,4 @@ if __name__ == "__main__":
     # under a cp1252 console. echo() degrades the glyph instead of the run.
     echo(final_text(result))
     echo(f"\nRecorded session {run_agent.last_session_id}")
-    echo(f"  retrail log {run_agent.last_session_id}")
+    echo(f"  retrial log {run_agent.last_session_id}")

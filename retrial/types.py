@@ -1,4 +1,4 @@
-"""The shapes retrail hands back.
+"""The shapes retrial hands back.
 
 Every public function returns a plain dict, and that stays true. A TypedDict
 *is* a dict at runtime, so nothing here changes behaviour - it only puts the
@@ -136,7 +136,7 @@ class _PatchOpRequired(TypedDict):
 class PatchOp(_PatchOpRequired, total=False):
     """One patch operation; `value` is required except for `remove`.
 
-    Split in two because `typing.NotRequired` landed in 3.11 and retrail
+    Split in two because `typing.NotRequired` landed in 3.11 and retrial
     supports 3.10.
     """
 
@@ -161,7 +161,7 @@ class CallbackProvenance(TypedDict):
     note: str
 
 
-#: Stored on the fork's session row so `retrail log` shows WHAT changed, not
+#: Stored on the fork's session row so `retrial log` shows WHAT changed, not
 #: just where.
 EditProvenance = PatchProvenance | CallbackProvenance
 
@@ -191,7 +191,7 @@ class Agent(Protocol):
     argument, which is what lets a fork seed it with edited state.
     """
 
-    __retrail_agent__: bool
+    __retrial_agent__: bool
     last_session_id: str | None
 
     def __call__(self, messages: list[Any], /, *args: Any, **kwargs: Any) -> Any: ...
@@ -406,7 +406,7 @@ class ExportHeader(TypedDict):
     exported_at: float
     #: Producing version, for bug reports. Never used to make decisions - that
     #: is what `format` and `requires` are for.
-    retrail: str
+    retrial: str
 
 
 class ExportSession(TypedDict):

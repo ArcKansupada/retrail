@@ -16,9 +16,9 @@ import json
 
 import pytest
 
-from retrail import record
-from retrail.errors import RetrailError
-from retrail.explore import UNAVAILABLE, ablate, sweep
+from retrial import record
+from retrial.errors import RetrialError
+from retrial.explore import UNAVAILABLE, ablate, sweep
 
 BUDGET = 600
 
@@ -159,7 +159,7 @@ def test_one_re_execution_per_tool_call(store, agent, recorded):
 
 
 def test_every_probe_is_a_recorded_session(store, agent, recorded):
-    """Auditable, like bisect's. You can retrail log any of them."""
+    """Auditable, like bisect's. You can retrial log any of them."""
     before = len(store.list_sessions())
     result = ablate(store, recorded, CHECK, agent=agent, agent_args=DEPS)
 
@@ -173,7 +173,7 @@ def test_every_probe_is_a_recorded_session(store, agent, recorded):
 def test_the_default_perturbation_blanks_every_result_in_a_step(store, agent, recorded):
     """A step with parallel tool calls must be fully ablated, not just its first
     result - otherwise the probe silently under-perturbs."""
-    from retrail.explore import _default_perturbation
+    from retrial.explore import _default_perturbation
 
     step = {"output": [{"content": "a"}, {"content": "b"}, {"content": "c"}]}
     patch = _default_perturbation(step)
@@ -235,7 +235,7 @@ def test_ablate_refuses_a_session_with_no_tool_calls(store, opening):
     agent = record(session_name="chat", store=store)(no_tools)
     agent(opening, [], lambda m, t: _text("hello"), execute_tools)
 
-    with pytest.raises(RetrailError, match="no forkable tool_call steps"):
+    with pytest.raises(RetrialError, match="no forkable tool_call steps"):
         ablate(
             store, agent.last_session_id, "output contains 'hello'",
             agent=agent, agent_args=DEPS,
@@ -312,7 +312,7 @@ def test_sweep_costs_one_re_execution_per_value(store, agent, recorded):
 
 
 def test_sweep_needs_values(store, agent, recorded):
-    with pytest.raises(RetrailError, match="at least one value"):
+    with pytest.raises(RetrialError, match="at least one value"):
         sweep(store, search_sha(store, recorded), [], agent=agent, agent_args=DEPS)
 
 
@@ -324,22 +324,22 @@ def test_ablate_refuses_when_the_baseline_check_fails(store, agent, recorded):
     this when the check said 'Confirmed' but the model wrote 'Confirmation
     code'.
     """
-    with pytest.raises(RetrailError, match="no good outcome to ablate") as exc:
+    with pytest.raises(RetrialError, match="no good outcome to ablate") as exc:
         ablate(
             store, recorded, "output contains 'never appears'",
             agent=agent, agent_args=DEPS,
         )
     # It must point at the tool that does handle a failing run.
-    assert "retrail bisect" in str(exc.value)
+    assert "retrial bisect" in str(exc.value)
     # And show the answer, so a mistyped check is obvious immediately.
     assert "Confirmed: booked for $450." in str(exc.value)
 
 
 def test_ablate_and_bisect_refuse_opposite_baselines(store, agent, recorded, opening):
     """The duality asserted directly: exactly one tool takes the job."""
-    from retrail.bisect import bisect
+    from retrial.bisect import bisect
 
     # This run PASSES the check: ablate accepts it, bisect refuses it.
     ablate(store, recorded, CHECK, agent=agent, agent_args=DEPS)
-    with pytest.raises(RetrailError, match="already passes"):
+    with pytest.raises(RetrialError, match="already passes"):
         bisect(store, recorded, CHECK, agent=agent, agent_args=DEPS)

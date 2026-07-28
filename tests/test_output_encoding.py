@@ -1,6 +1,6 @@
 """Guard: user-facing text must survive a cp1252 console.
 
-This bit twice: `retrail list` crashed outright on Windows because of box
+This bit twice: `retrial list` crashed outright on Windows because of box
 drawing characters, and em-dashes in help text rendered as garbage. Both are
 trivially avoidable, so the rule is enforced rather than remembered.
 
@@ -13,7 +13,7 @@ import pathlib
 
 import pytest
 
-PACKAGE = pathlib.Path(__file__).parent.parent / "retrail"
+PACKAGE = pathlib.Path(__file__).parent.parent / "retrial"
 SANCTIONED = {"cli.py": {"_glyphs"}}
 
 
@@ -62,7 +62,7 @@ def test_glyphs_are_actually_gated():
 #
 # The rules above cover text WE wrote; below covers text the MODEL wrote, which
 # can be any Unicode at all. A real Opus run returned an emoji and killed a
-# plain `print`, and retrail prints model text in diff, bisect, and log - so an
+# plain `print`, and retrial prints model text in diff, bisect, and log - so an
 # emoji in an ANSWER would take down the command reporting it.
 
 
@@ -90,10 +90,10 @@ class FakeConsole:
 
 
 def _echo_to(monkeypatch, encoding, text):
-    from retrail.cli import echo
+    from retrial.cli import echo
 
     console = FakeConsole(encoding)
-    monkeypatch.setattr("retrail.cli.sys.stdout", console)
+    monkeypatch.setattr("retrial.cli.sys.stdout", console)
     monkeypatch.setattr("click.utils._default_text_stdout", lambda: console)
     echo(text)
     return console.getvalue()
@@ -143,10 +143,10 @@ def test_warn_degrades_like_echo(monkeypatch):
 
     Diagnostics are downstream of model output too - the note naming a session
     can carry whatever the model called it."""
-    from retrail.cli import warn
+    from retrial.cli import warn
 
     console = FakeConsole("cp1252")
-    monkeypatch.setattr("retrail.cli.sys.stderr", console)
+    monkeypatch.setattr("retrial.cli.sys.stderr", console)
     monkeypatch.setattr("click.utils._default_text_stderr", lambda: console)
 
     warn("Booked ✅ for €450 \U0001f6eb")
@@ -157,10 +157,10 @@ def test_warn_degrades_like_echo(monkeypatch):
 
 
 def test_warn_leaves_encodable_text_untouched(monkeypatch):
-    from retrail.cli import warn
+    from retrial.cli import warn
 
     console = FakeConsole("cp1252")
-    monkeypatch.setattr("retrail.cli.sys.stderr", console)
+    monkeypatch.setattr("retrial.cli.sys.stderr", console)
     monkeypatch.setattr("click.utils._default_text_stderr", lambda: console)
 
     warn("note: a store already exists above this directory")

@@ -2,16 +2,16 @@ import sqlite3
 
 import pytest
 
-from retrail.errors import (
+from retrial.errors import (
     AmbiguousSha,
     NotFound,
     ReplayIntegrityError,
-    RetrailError,
+    RetrialError,
     SchemaVersionError,
 )
-from retrail.serialize import canonical_json, to_jsonable
-from retrail.sha import compute_sha
-from retrail.storage import SCHEMA_VERSION, Store
+from retrial.serialize import canonical_json, to_jsonable
+from retrial.sha import compute_sha
+from retrial.storage import SCHEMA_VERSION, Store
 
 
 def test_sha_is_stable_across_dict_ordering():
@@ -121,7 +121,7 @@ def test_fork_is_a_new_row_not_a_mutation(store):
 # -- schema versioning --------------------------------------------------------
 #
 # `CREATE TABLE IF NOT EXISTS` accepts a database written by any other version
-# of retrail and then misbehaves somewhere else, later. These tests pin what
+# of retrial and then misbehaves somewhere else, later. These tests pin what
 # replaced it: the file states which schema wrote it, and a version this code
 # cannot read is refused at open time.
 
@@ -163,9 +163,9 @@ def test_a_newer_schema_is_refused_rather_than_opened(tmp_path):
         Store(path)
 
     message = str(excinfo.value)
-    assert "newer retrail" in message
+    assert "newer retrial" in message
     assert f"v{SCHEMA_VERSION + 1}" in message
-    assert "pip install -U retrail" in message
+    assert "pip install -U retrial" in message
 
 
 def test_refusing_a_newer_schema_does_not_leave_the_file_locked(tmp_path):
@@ -194,7 +194,7 @@ def test_refusing_a_newer_schema_does_not_leave_the_file_locked(tmp_path):
 
 
 def test_a_pre_versioning_database_is_adopted_not_refused(tmp_path):
-    """retrail 0.1.0 wrote v1 tables with no stamp. That layout IS v1.
+    """retrial 0.1.0 wrote v1 tables with no stamp. That layout IS v1.
 
     Refusing them would mean refusing every trace recorded before the marker
     existed, which is the opposite of the point.
@@ -217,6 +217,6 @@ def test_a_pre_versioning_database_is_adopted_not_refused(tmp_path):
     assert _user_version(path) == SCHEMA_VERSION
 
 
-def test_schema_version_error_is_a_retrail_error(tmp_path):
+def test_schema_version_error_is_a_retrial_error(tmp_path):
     """So the CLI renders it as a message rather than a traceback."""
-    assert issubclass(SchemaVersionError, RetrailError)
+    assert issubclass(SchemaVersionError, RetrialError)

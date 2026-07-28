@@ -31,7 +31,7 @@ from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 from .diff import final_answer
-from .errors import RetrailError
+from .errors import RetrialError
 from .fork import fork
 from .trajectory import trajectory
 from .types import (
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .storage import Store
 
 
-class CheckError(RetrailError):
+class CheckError(RetrialError):
     pass
 
 
@@ -145,11 +145,11 @@ def bisect(
 
     candidates = forkable_steps(store, session_id)
     if not candidates:
-        raise RetrailError(f"session {session_id} has no steps to bisect")
+        raise RetrialError(f"session {session_id} has no steps to bisect")
 
     original_answer = final_answer(trajectory(store, session_id))
     if check(original_answer):
-        raise RetrailError(
+        raise RetrialError(
             "the check already passes on the original run, so there is no "
             f"failure to localize. Final answer was: {original_answer!r}"
         )

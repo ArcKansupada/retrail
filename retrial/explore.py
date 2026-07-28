@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from .bisect import describe_check, forkable_steps, parse_check
 from .diff import final_answer
-from .errors import RetrailError
+from .errors import RetrialError
 from .fork import fork
 from .pricing import trajectory_cost
 from .trajectory import trajectory
@@ -134,13 +134,13 @@ def ablate(
         # With a failing baseline every probe reports "outcome held" and gets
         # labelled NOT load-bearing - reassuring, and vacuous: the run was
         # broken the whole time. Bisect is the tool for that case.
-        raise RetrailError(
+        raise RetrialError(
             "the check does not pass on the original run, so there is no good "
             "outcome to ablate. Ablation asks which facts a SUCCESSFUL run "
             "depended on.\n"
             f"  final answer was: {baseline!r}\n"
             "Either the check is wrong for this run, or the run failed -- in "
-            "which case you want `retrail bisect`, which localizes which step "
+            "which case you want `retrial bisect`, which localizes which step "
             "made a failure inevitable."
         )
 
@@ -156,7 +156,7 @@ def ablate(
         s for s in forkable_steps(store, session_id) if s["step_type"] == "tool_call"
     ]
     if not candidates:
-        raise RetrailError(
+        raise RetrialError(
             f"session {session_id} has no forkable tool_call steps to ablate. "
             "Ablation perturbs recorded facts, and this run produced none that "
             "can be resumed from."
@@ -251,7 +251,7 @@ def sweep(
     if isinstance(check, str):
         check = parse_check(check)
     if not values:
-        raise RetrailError("sweep needs at least one value")
+        raise RetrialError("sweep needs at least one value")
 
     step = store.get_step(from_sha)
 

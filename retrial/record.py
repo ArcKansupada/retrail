@@ -120,7 +120,7 @@ def record(
     loop with edited history and get genuine re-execution.
 
     The decorated function keeps its own signature, so your call sites stay
-    checked. It also gains `last_session_id` and `__retrail_agent__`; those are
+    checked. It also gains `last_session_id` and `__retrial_agent__`; those are
     set with `type: ignore` because a function object has no such attributes
     statically, which is exactly what `types.Agent` describes.
     """
@@ -140,9 +140,9 @@ def record(
         if _is_async(fn):
             raise IntegrationError(
                 f"@record cannot record {getattr(fn, '__name__', fn)!r} because it is "
-                "an async function, and retrail does not support async agents yet. "
+                "an async function, and retrial does not support async agents yet. "
                 "Calling an async function returns a coroutine without running its "
-                "body, so retrail would mark the session complete before your loop "
+                "body, so retrial would mark the session complete before your loop "
                 "had taken a step - and a run that later failed would be recorded as "
                 "a successful one. Wrap the loop in a synchronous function (for "
                 "example, one that calls asyncio.run) and decorate that instead."
@@ -153,7 +153,7 @@ def record(
             if name not in signature.parameters:
                 raise IntegrationError(
                     f"@record expected {fn.__name__!r} to take a {name!r} parameter "
-                    f"but its signature is {signature}. retrail intercepts the model "
+                    f"but its signature is {signature}. retrial intercepts the model "
                     "call and the tool executor by name; pass them in explicitly "
                     "(or set the *_arg options on @record)."
                 )
@@ -165,7 +165,7 @@ def record(
 
             # Validate BEFORE touching the store. Both interception points are
             # wrapped here, before the body runs, so a lazily-constructed
-            # callable cannot work: retrail wraps whatever the argument is at
+            # callable cannot work: retrial wraps whatever the argument is at
             # call time, and a `None` sentinel meant to be replaced inside the
             # body gets wrapped instead, failing as "'NoneType' object is not
             # callable" several frames deep. Say so at the boundary - and say
@@ -189,10 +189,10 @@ def record(
                 # silent about the actual cause. Name it here instead.
                 if _is_async(bound.arguments[name]):
                     raise IntegrationError(
-                        f"{fn.__name__}() got an async {name}, which retrail cannot "
-                        "record yet. retrail calls it and records what comes back; "
+                        f"{fn.__name__}() got an async {name}, which retrial cannot "
+                        "record yet. retrial calls it and records what comes back; "
                         "for a coroutine function that is an un-awaited coroutine, "
-                        "not the model's response. Give retrail a synchronous "
+                        "not the model's response. Give retrial a synchronous "
                         f"{name} (for example one that calls asyncio.run internally) "
                         "so there is a real response to record."
                     )
@@ -222,7 +222,7 @@ def record(
             return result
 
         wrapper.last_session_id = None  # type: ignore[attr-defined]
-        wrapper.__retrail_agent__ = True  # type: ignore[attr-defined]
+        wrapper.__retrial_agent__ = True  # type: ignore[attr-defined]
         return wrapper
 
     return decorator

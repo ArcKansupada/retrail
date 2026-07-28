@@ -11,10 +11,10 @@ import json
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import fork, record
-from retrail.errors import ExportFormatError, NotFound
-from retrail.portable import parse_document
-from retrail.transfer import export
+from retrial import fork, record
+from retrial.errors import ExportFormatError, NotFound
+from retrial.portable import parse_document
+from retrial.transfer import export
 
 PRICE_999 = {
     "op": "replace",
@@ -150,7 +150,7 @@ def test_step_content_survives_verbatim(store, recorded):
 
 
 def test_the_forks_edit_provenance_survives(store, recorded):
-    """`retrail log` shows WHAT changed, not just where. That must travel."""
+    """`retrial log` shows WHAT changed, not just where. That must travel."""
     _, sessions, _ = read(store, [recorded["fork"]])
     forked = next(s for s in sessions if s["id"] == recorded["fork"])
 

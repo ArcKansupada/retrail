@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from retrail import record
-from retrail.errors import RetrailError
-from retrail.pricing import PRICES, cost_of, fmt, normalize, trajectory_cost
-from retrail.regress import recorded_runs, rerun
+from retrial import record
+from retrial.errors import RetrialError
+from retrial.pricing import PRICES, cost_of, fmt, normalize, trajectory_cost
+from retrial.regress import recorded_runs, rerun
 
 # --- pricing ---------------------------------------------------------------
 
@@ -182,7 +182,7 @@ def test_tool_calls_have_no_cost(store, agent, corpus):
 def test_recorded_runs_excludes_forks_and_probes(store, agent, corpus):
     """Otherwise every bisect probe becomes a test case, and the suite grows
     every time you use the tool."""
-    from retrail import fork
+    from retrial import fork
 
     step = next(s for s in store.steps_for(corpus[0]) if s["step_type"] == "tool_call")
     fork(from_sha=step["sha"], agent=agent, store=store, agent_args=DEPS)
@@ -253,12 +253,12 @@ def test_a_case_that_errors_does_not_stop_the_suite(store, agent, corpus):
 
 
 def test_rerun_refuses_an_empty_corpus(store, agent):
-    with pytest.raises(RetrailError, match="no recorded runs"):
+    with pytest.raises(RetrialError, match="no recorded runs"):
         rerun(store, CHECK, agent=agent, agent_args=DEPS)
 
 
 def test_rerun_rejects_a_bad_from_value(store, agent, corpus):
-    with pytest.raises(RetrailError, match="must be 'first' or 'last'"):
+    with pytest.raises(RetrialError, match="must be 'first' or 'last'"):
         rerun(store, CHECK, agent=agent, where="middle", agent_args=DEPS)
 
 
@@ -269,7 +269,7 @@ def test_a_trace_recorded_before_cost_tracking_is_still_priced():
     response still carries model and usage, so the figure is recoverable
     exactly rather than estimated.
     """
-    from retrail.pricing import cost_of_step
+    from retrial.pricing import cost_of_step
 
     old = {
         "step_type": "model_call",
@@ -282,7 +282,7 @@ def test_a_trace_recorded_before_cost_tracking_is_still_priced():
 
 def test_a_stored_cost_is_never_overwritten_by_todays_prices():
     """Re-pricing history would quietly rewrite what you actually paid."""
-    from retrail.pricing import cost_of_step
+    from retrial.pricing import cost_of_step
 
     entry = {
         "step_type": "model_call",
@@ -294,7 +294,7 @@ def test_a_stored_cost_is_never_overwritten_by_todays_prices():
 
 
 def test_tool_steps_are_never_priced():
-    from retrail.pricing import cost_of_step
+    from retrial.pricing import cost_of_step
 
     assert cost_of_step({"step_type": "tool_call", "cost_usd": None, "output": []}) is None
 

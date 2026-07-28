@@ -16,9 +16,9 @@ import json
 
 import pytest
 
-from retrail import record
-from retrail.bisect import CheckError, bisect, forkable_steps, parse_check
-from retrail.errors import RetrailError
+from retrial import record
+from retrial.bisect import CheckError, bisect, forkable_steps, parse_check
+from retrial.errors import RetrialError
 
 # --- the flaky world -------------------------------------------------------
 
@@ -165,7 +165,7 @@ def test_bisect_localizes_the_transient_failure(store, broken_run):
 
 
 def test_bisect_probes_are_real_re_executions_recorded_as_sessions(store, broken_run):
-    """Every probe is auditable - you can `retrail log` any of them.
+    """Every probe is auditable - you can `retrial log` any of them.
 
     That matters because the binary search assumes monotonicity, which a real
     model does not strictly guarantee. The probes are the evidence.
@@ -243,7 +243,7 @@ def test_bisect_refuses_when_the_check_already_passes(store, opening):
     )
     agent(opening, [], flaky_model, executor)
 
-    with pytest.raises(RetrailError, match="already passes"):
+    with pytest.raises(RetrialError, match="already passes"):
         bisect(
             store, agent.last_session_id, "output contains 'Booked'",
             agent=agent, agent_args=([], flaky_model, executor),

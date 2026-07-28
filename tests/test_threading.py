@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import record
+from retrial import record
 
 THREADS = 8
 
@@ -118,9 +118,9 @@ def test_an_explicit_step_number_is_still_honoured(store):
 
 def test_the_default_store_is_created_exactly_once(tmp_path, monkeypatch):
     """Unguarded, 8 threads opened 8 connections and orphaned 7 of them."""
-    monkeypatch.delenv("RETRAIL_DB", raising=False)
+    monkeypatch.delenv("RETRIAL_DB", raising=False)
     monkeypatch.chdir(tmp_path)
-    record_module = importlib.import_module("retrail.record")
+    record_module = importlib.import_module("retrial.record")
     record_module._default_stores.clear()
 
     try:
@@ -145,7 +145,7 @@ def test_pending_context_does_not_leak_between_threads(store):
     first and one agent's steps were recorded under the other's session - a
     trace that reads as valid and describes a run that never happened.
     """
-    record_module = importlib.import_module("retrail.record")
+    record_module = importlib.import_module("retrial.record")
     sessions = [store.create_session(name=f"fork-{i}") for i in range(THREADS)]
 
     def claim(i):
@@ -161,7 +161,7 @@ def test_pending_context_does_not_leak_between_threads(store):
 
 
 def test_pending_set_on_one_thread_is_invisible_to_another(store):
-    record_module = importlib.import_module("retrail.record")
+    record_module = importlib.import_module("retrial.record")
     record_module._pending["session"] = {"store": store, "session_id": "s_main"}
     try:
         with ThreadPoolExecutor(1) as pool:

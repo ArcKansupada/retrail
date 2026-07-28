@@ -14,7 +14,7 @@ import click
 from . import __version__
 from .bisect import bisect as bisect_session
 from .diff import diff as diff_sessions
-from .errors import RetrailError
+from .errors import RetrialError
 from .explore import ablate as ablate_session
 from .explore import sweep as sweep_session
 from .fork import fork as fork_session
@@ -61,7 +61,7 @@ def _console_encoding() -> str:
 def echo(text: object = "") -> None:
     """click.echo, but it cannot be killed by a character.
 
-    Everything retrail prints is downstream of model output, a real model emits
+    Everything retrial prints is downstream of model output, a real model emits
     emoji freely, and a Windows console defaults to cp1252 - so an un-encodable
     character in an ANSWER would take down the command reporting it. Degrading
     one glyph beats losing the output.
@@ -137,7 +137,7 @@ def _glyphs() -> dict[str, str]:
     """Tree glyphs the terminal can actually encode.
 
     Windows consoles default to cp1252, which has no box-drawing characters -
-    printing them raises UnicodeEncodeError and takes down `retrail list`.
+    printing them raises UnicodeEncodeError and takes down `retrial list`.
     Degrade to ASCII rather than crash on the happy path.
     """
     try:
@@ -147,8 +147,8 @@ def _glyphs() -> dict[str, str]:
     return {"last": "└── ", "mid": "├── ", "pipe": "│   "}
 
 
-class RetrailGroup(click.Group):
-    """Renders retrail's deliberate errors as messages, not tracebacks.
+class RetrialGroup(click.Group):
+    """Renders retrial's deliberate errors as messages, not tracebacks.
 
     On the group rather than in main() so it applies however the CLI is entered
     - console script, `python -m`, or a test harness invoking the group
@@ -159,27 +159,27 @@ class RetrailGroup(click.Group):
     def invoke(self, ctx: click.Context) -> Any:
         try:
             return super().invoke(ctx)
-        except RetrailError as exc:
+        except RetrialError as exc:
             echo(f"error: {exc}")
             ctx.exit(1)
 
 
-@click.group(cls=RetrailGroup)
+@click.group(cls=RetrialGroup)
 # From the package, not importlib.metadata: a source checkout that was never
 # pip-installed still has to answer `--version`, and that checkout is exactly
 # where a bug report comes from.
-@click.version_option(__version__, "-V", "--version", prog_name="retrail")
+@click.version_option(__version__, "-V", "--version", prog_name="retrial")
 @click.option(
     "--db",
     default=None,
     help=(
-        "Path to the sessions database. Defaults to the nearest .retrail/ at or "
-        "above the current directory, then $RETRAIL_DB, then ./.retrail/."
+        "Path to the sessions database. Defaults to the nearest .retrial/ at or "
+        "above the current directory, then $RETRIAL_DB, then ./.retrial/."
     ),
 )
 @click.pass_context
 def cli(ctx: click.Context, db: str | None) -> None:
-    """retrail - git for agent trajectories."""
+    """retrial - git for agent trajectories."""
     ctx.ensure_object(dict)
     # Both are kept: `init` creates a store *here* and must not be redirected
     # to a discovered one, the way `git init` always makes a repo in the
@@ -191,7 +191,7 @@ def cli(ctx: click.Context, db: str | None) -> None:
 @cli.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    """Create .retrail/ and the sqlite database in the current directory."""
+    """Create .retrial/ and the sqlite database in the current directory."""
     # Deliberately not ctx.obj["db"]: that searches upward, so `init` inside a
     # project that already has a store would reopen the parent's and report
     # success without creating anything here.
@@ -205,7 +205,7 @@ def init(ctx: click.Context) -> None:
         echo(f"Already initialized: {path}")
         return
 
-    echo(f"Initialized empty retrail store: {path}")
+    echo(f"Initialized empty retrial store: {path}")
     if shadowed:
         # Legal, but almost never what someone means, and the symptom - "my
         # sessions vanished" - points nowhere near the cause. Say it here,
@@ -342,7 +342,7 @@ def _summarize(step: Step | TrajectoryEntry) -> str:
         stop = out.get("stop_reason") if isinstance(out, dict) else None
         content = out.get("content") if isinstance(out, dict) else None
         # str(), because a content block is model output and need not carry a
-        # 'type'; a None here would take down `retrail log` inside str.join -
+        # 'type'; a None here would take down `retrial log` inside str.join -
         # the same failure shape as the encoding bug.
         kinds = (
             [str(b.get("type", "?")) for b in content if isinstance(b, dict)]
@@ -408,8 +408,8 @@ def export(
     never travel: exporting a root does not hand over the experiments run on
     top of it.
 
-        retrail export s_ab12cd34ef > trace.jsonl
-        retrail export --all -o backup.jsonl
+        retrial export s_ab12cd34ef > trace.jsonl
+        retrial export --all -o backup.jsonl
     """
     if everything and session_ids:
         raise click.UsageError("give session ids or --all, not both.")
@@ -422,7 +422,7 @@ def export(
             None if everything else list(session_ids),
             ancestors=not no_ancestors,
         )
-        # Diagnostics on stderr, so `retrail export s_x | gh gist create -`
+        # Diagnostics on stderr, so `retrial export s_x | gh gist create -`
         # sends a file and not a file with a warning in it.
         if no_ancestors:
             warn(
@@ -444,8 +444,8 @@ def import_cmd(ctx: click.Context, source: str) -> None:
     is refused rather than trusted. Sessions already here with identical
     content are skipped, which makes re-importing the same file a no-op.
 
-        retrail import trace.jsonl
-        cat trace.jsonl | retrail import -
+        retrial import trace.jsonl
+        cat trace.jsonl | retrial import -
     """
     with _store(ctx) as store:
         result = import_document(store, read_data(source), path=None if source == "-" else source)
@@ -511,7 +511,7 @@ def fork(
             from_sha=sha, edit=edit, agent=target, store=store, name=name
         )
         echo(f"Forked into session {session_id}")
-        echo(f"  retrail log {session_id}")
+        echo(f"  retrial log {session_id}")
 
 
 @cli.command()
@@ -694,7 +694,7 @@ def _render_bisect(result: BisectResult) -> None:
     echo(f"\nFirst step that could not recover: {short(culprit['sha'])}")
     echo(f"  step {culprit['step_number']}  {culprit['step_type']}")
     echo(f"  {_summarize(culprit)}")
-    echo(f"\n  retrail show {short(culprit['sha'])}")
+    echo(f"\n  retrial show {short(culprit['sha'])}")
     echo(
         "\nEverything before this step recovered on re-execution; from here on "
         "the failure reproduces. Note that binary search assumes that boundary "
@@ -854,7 +854,7 @@ def cost(ctx: click.Context, session_id: str) -> None:
         if unpriced:
             echo(
                 f"  {unpriced} model call(s) could not be priced (unknown model or "
-                "no usage reported). retrail reports no total rather than a "
+                "no usage reported). retrial reports no total rather than a "
                 "partial one you might act on."
             )
 
@@ -935,7 +935,7 @@ def _render_rerun(result: RerunResult) -> None:
         )
         echo(f"  was: {regression['before_answer']}")
         echo(f"  now: {regression['answer']}")
-        echo(f"  retrail diff {regression['session_id']} {regression['fork_id']}")
+        echo(f"  retrial diff {regression['session_id']} {regression['fork_id']}")
 
     if result["regressed"]:
         # Exit non-zero so CI fails on a regression without extra plumbing.
@@ -963,7 +963,7 @@ def _load_agent(spec: str) -> Agent:
         raise click.BadParameter(
             f"{module_name!r} has no attribute {attr!r}", param_hint="--agent"
         ) from None
-    if not getattr(target, "__retrail_agent__", False):
+    if not getattr(target, "__retrial_agent__", False):
         raise click.BadParameter(
             f"{spec} is not decorated with @record, so its re-execution would not "
             "be recorded.",
@@ -973,7 +973,7 @@ def _load_agent(spec: str) -> Agent:
 
 
 def main() -> None:
-    # RetrailError is handled by RetrailGroup, so it renders identically here
+    # RetrialError is handled by RetrialGroup, so it renders identically here
     # and under every other entry point.
     cli(obj={})
 

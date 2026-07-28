@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from retrail.storage import Store
+from retrial.storage import Store
 
 
 @dataclass
@@ -117,7 +117,7 @@ def raw_agent(messages, tools, call_model, execute_tools):
 
 @pytest.fixture
 def store(tmp_path):
-    s = Store(str(tmp_path / ".retrail" / "sessions.db"))
+    s = Store(str(tmp_path / ".retrial" / "sessions.db"))
     yield s
     s.close()
 

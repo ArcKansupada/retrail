@@ -15,11 +15,11 @@ import json
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import diff, fork, record, trajectory
-from retrail.errors import ExportFormatError
-from retrail.portable import dump_line, parse_document
-from retrail.storage import Store
-from retrail.transfer import export, import_
+from retrial import diff, fork, record, trajectory
+from retrial.errors import ExportFormatError
+from retrial.portable import dump_line, parse_document
+from retrial.storage import Store
+from retrial.transfer import export, import_
 
 PRICE_999 = {
     "op": "replace",
@@ -30,7 +30,7 @@ PRICE_999 = {
 
 @pytest.fixture
 def source(tmp_path, opening):
-    store = Store(str(tmp_path / "source" / ".retrail" / "sessions.db"))
+    store = Store(str(tmp_path / "source" / ".retrial" / "sessions.db"))
     agent = record(session_name="root-run", store=store)(raw_agent)
     agent(opening, TOOLS, fake_model, make_executor(450))
     root = agent.last_session_id
@@ -48,7 +48,7 @@ def source(tmp_path, opening):
 
 @pytest.fixture
 def target(tmp_path):
-    store = Store(str(tmp_path / "target" / ".retrail" / "sessions.db"))
+    store = Store(str(tmp_path / "target" / ".retrial" / "sessions.db"))
     yield store
     store.close()
 
@@ -205,7 +205,7 @@ def test_a_write_failing_partway_rolls_back(source, target, monkeypatch):
     injected - but the guarantee exists for the cases nobody predicted, which
     is exactly the set that cannot be triggered on purpose.
     """
-    import retrail.transfer as transfer
+    import retrial.transfer as transfer
 
     real = transfer._insert_step
     calls = {"n": 0}
@@ -228,7 +228,7 @@ def test_a_write_failing_partway_rolls_back(source, target, monkeypatch):
 
 def test_the_store_still_works_after_a_rolled_back_import(source, target, monkeypatch):
     """A rollback that left the connection wedged would be its own bug."""
-    import retrail.transfer as transfer
+    import retrial.transfer as transfer
 
     def explode(conn, step):
         raise RuntimeError("disk full")

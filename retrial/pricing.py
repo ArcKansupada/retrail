@@ -5,7 +5,7 @@ number, because a silently wrong cost is worse than a missing one - you would
 act on it.
 
 Prices are USD per million tokens and they go stale. They are a lookup table,
-not a source of truth: check `retrail cost` against your actual bill.
+not a source of truth: check `retrial cost` against your actual bill.
 """
 
 from __future__ import annotations

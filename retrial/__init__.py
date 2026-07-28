@@ -1,4 +1,4 @@
-"""retrail - git for agent trajectories.
+"""retrial - git for agent trajectories.
 
 Branch, diff, and bisect LLM agent runs, backed by real re-execution instead of
 static logs.
@@ -12,7 +12,7 @@ from .errors import (
     IntegrationError,
     NotFound,
     ReplayIntegrityError,
-    RetrailError,
+    RetrialError,
     SchemaVersionError,
 )
 from .explore import ablate, sweep
@@ -27,7 +27,7 @@ from .transfer import export, import_
 
 # The shapes every function above returns. Re-exported so annotating your own
 # code never means importing from a private-looking submodule. See
-# retrail/types.py, and CHANGELOG.md for what "stable" means before 1.0.
+# retrial/types.py, and CHANGELOG.md for what "stable" means before 1.0.
 from .types import (
     JSON,
     AblateProbe,
@@ -79,7 +79,7 @@ __all__ = [
     "import_",
     "apply_patch",
     "Store",
-    "RetrailError",
+    "RetrialError",
     "NotFound",
     "AmbiguousSha",
     "ReplayIntegrityError",

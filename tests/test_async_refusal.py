@@ -6,7 +6,7 @@ steps, and the `except BaseException` that marks a crashed run `failed` never
 sees the failure - it happens later, inside the event loop. The result is a run
 that raised partway through, stored as a successful one.
 
-Worse than a crash: every other retrail failure is loud, but this one leaves a
+Worse than a crash: every other retrial failure is loud, but this one leaves a
 trace that quietly disagrees with what happened. So it is refused at decoration
 time, before any of it can occur.
 """
@@ -16,8 +16,8 @@ import asyncio
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import record
-from retrail.errors import IntegrationError
+from retrial import record
+from retrial.errors import IntegrationError
 
 
 def test_decorating_an_async_agent_is_refused(store):

@@ -5,20 +5,20 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from retrail.cli import _glyphs, cli
+from retrial.cli import _glyphs, cli
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    db = str(tmp_path / ".retrail" / "sessions.db")
+    db = str(tmp_path / ".retrial" / "sessions.db")
     runner = CliRunner()
 
     def run(*args, expect_ok=True):
         result = runner.invoke(cli, ["--db", db, *args], obj={})
         if expect_ok and result.exit_code != 0:
             raise AssertionError(
-                f"`retrail {' '.join(args)}` exited {result.exit_code}\n"
+                f"`retrial {' '.join(args)}` exited {result.exit_code}\n"
                 f"{result.output}\n{result.exception!r}"
             )
         return result
@@ -31,7 +31,7 @@ def write_agent(tmp_path, module="toy_agent"):
     (tmp_path / f"{module}.py").write_text(
         '''
 import json
-from retrail import record
+from retrial import record
 
 def call_model(messages, tools=None):
     last = messages[-1]
@@ -70,7 +70,7 @@ def record_a_run(db, tmp_path, module="toy_agent"):
 
     write_agent(tmp_path, module)
     script = (
-        f"import {module}, retrail.storage as st;"
+        f"import {module}, retrial.storage as st;"
         f"st.default_db_path = lambda root=None: {db!r};"
         f"{module}.run_agent([{{'role':'user','content':'hi'}}])"
     )
@@ -87,7 +87,7 @@ def record_a_run(db, tmp_path, module="toy_agent"):
 def test_init_creates_the_store(env):
     run, db, _ = env
     result = run("init")
-    assert "Initialized empty retrail store" in result.output
+    assert "Initialized empty retrial store" in result.output
     assert run("init").output.startswith("Already initialized")
 
 
@@ -98,13 +98,13 @@ def test_list_on_an_empty_store(env):
 
 
 def test_glyphs_fall_back_to_ascii_on_a_cp1252_console(monkeypatch):
-    """`retrail list` printed box-drawing characters and crashed outright on
+    """`retrial list` printed box-drawing characters and crashed outright on
     Windows' default cp1252 console. Never again."""
 
     class Cp1252Stdout:
         encoding = "cp1252"
 
-    monkeypatch.setattr("retrail.cli.sys.stdout", Cp1252Stdout())
+    monkeypatch.setattr("retrial.cli.sys.stdout", Cp1252Stdout())
     g = _glyphs()
     assert g == {"last": "`-- ", "mid": "|-- ", "pipe": "|   "}
     for value in g.values():
@@ -115,7 +115,7 @@ def test_glyphs_use_box_drawing_when_supported(monkeypatch):
     class Utf8Stdout:
         encoding = "utf-8"
 
-    monkeypatch.setattr("retrail.cli.sys.stdout", Utf8Stdout())
+    monkeypatch.setattr("retrial.cli.sys.stdout", Utf8Stdout())
     assert _glyphs()["last"] == "└── "
 
 
@@ -269,7 +269,7 @@ def test_bisect_end_to_end(env):
     (tmp_path / "flaky_agent.py").write_text(
         '''
 import json, os, pathlib
-from retrail import record
+from retrial import record
 
 STATE = pathlib.Path(__file__).parent / "outage.flag"
 
@@ -399,7 +399,7 @@ def test_ablate_refuses_a_failing_baseline_and_points_at_bisect(env):
     )
     assert result.exit_code != 0
     assert "no good outcome to ablate" in result.output
-    assert "retrail bisect" in result.output
+    assert "retrial bisect" in result.output
 
 
 def test_sweep_end_to_end(env):
@@ -466,17 +466,17 @@ def test_sweep_rejects_a_values_file_that_is_not_a_list(env):
 # -- entry points -------------------------------------------------------------
 #
 # Both are promises made in prose elsewhere (`--version` is the first thing
-# anyone types when filing a bug; `python -m` is named in RetrailGroup's own
+# anyone types when filing a bug; `python -m` is named in RetrialGroup's own
 # docstring), so both get a test that fails if the promise stops holding.
 
 
 def test_version_flag_reports_the_package_version():
-    from retrail import __version__
+    from retrial import __version__
 
     result = CliRunner().invoke(cli, ["--version"], obj={})
     assert result.exit_code == 0
     assert __version__ in result.output
-    assert "retrail" in result.output
+    assert "retrial" in result.output
 
 
 def test_version_flag_has_a_short_form():
@@ -484,17 +484,17 @@ def test_version_flag_has_a_short_form():
     assert result.exit_code == 0
 
 
-def test_python_dash_m_retrail_is_a_working_entry_point():
-    """`python -m retrail` must reach the same CLI as the console script."""
+def test_python_dash_m_retrial_is_a_working_entry_point():
+    """`python -m retrial` must reach the same CLI as the console script."""
     import subprocess
     import sys
     from pathlib import Path
 
-    from retrail import __version__
+    from retrial import __version__
 
     repo_root = Path(__file__).resolve().parent.parent
     proc = subprocess.run(
-        [sys.executable, "-m", "retrail", "--version"],
+        [sys.executable, "-m", "retrial", "--version"],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
@@ -506,21 +506,21 @@ def test_python_dash_m_retrail_is_a_working_entry_point():
 def test_package_ships_the_pep561_typed_marker():
     """py.typed is what makes the annotations visible to a consumer.
 
-    Without it, every downstream `from retrail import ...` is typed as Any no
+    Without it, every downstream `from retrial import ...` is typed as Any no
     matter how carefully the package is annotated - so the marker is part of
     the API, not packaging trivia. Asserted against the INSTALLED package, to
     cover an editable install and a wheel alike.
     """
     from pathlib import Path
 
-    import retrail
+    import retrial
 
-    assert (Path(retrail.__file__).parent / "py.typed").is_file()
+    assert (Path(retrial.__file__).parent / "py.typed").is_file()
 
 
 def test_public_types_are_importable_from_the_top_level():
     """Annotating your own code must not require a private-looking submodule."""
-    from retrail import DiffResult, Session, Step, TrajectoryEntry
+    from retrial import DiffResult, Session, Step, TrajectoryEntry
 
     assert set(Step.__annotations__) >= {"sha", "step_type", "input", "output"}
     assert "origin" in TrajectoryEntry.__annotations__
@@ -529,10 +529,10 @@ def test_public_types_are_importable_from_the_top_level():
 
 
 def test_a_newer_database_is_refused_as_a_message_not_a_traceback(env):
-    """The refusal has to be legible, or it just looks like retrail crashed."""
+    """The refusal has to be legible, or it just looks like retrial crashed."""
     import sqlite3
 
-    from retrail.storage import SCHEMA_VERSION
+    from retrial.storage import SCHEMA_VERSION
 
     run, db, tmp_path = env
     run("init")
@@ -545,5 +545,5 @@ def test_a_newer_database_is_refused_as_a_message_not_a_traceback(env):
     result = run("list", expect_ok=False)
     assert result.exit_code == 1
     assert result.output.startswith("error: ")
-    assert "newer retrail" in result.output
+    assert "newer retrial" in result.output
     assert "Traceback" not in result.output

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "retrail"
+name = "retrial"
 # ASCII on purpose. This string is printed by `pip show` and `pip search`-style
 # tooling, which on a Windows cp1252 console renders an em dash as a replacement
 # character - the same class of bug that the cli.echo()/_glyphs() handling and
@@ -40,44 +40,44 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = ["click>=8.0"]
-# Single-sourced from retrail/__init__.py so the package and the metadata can
+# Single-sourced from retrial/__init__.py so the package and the metadata can
 # never disagree about what version is installed.
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/ArcKansupada/retrail"
-Repository = "https://github.com/ArcKansupada/retrail"
-Issues = "https://github.com/ArcKansupada/retrail/issues"
-Changelog = "https://github.com/ArcKansupada/retrail/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/ArcKansupada/retrial"
+Repository = "https://github.com/ArcKansupada/retrial"
+Issues = "https://github.com/ArcKansupada/retrial/issues"
+Changelog = "https://github.com/ArcKansupada/retrial/blob/main/CHANGELOG.md"
 
 [project.scripts]
-retrail = "retrail.cli:main"
+retrial = "retrial.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff>=0.6", "mypy>=1.11", "build>=1.0", "twine>=5.0"]
-# retrail itself never imports an LLM SDK - it intercepts the model call you
+# retrial itself never imports an LLM SDK - it intercepts the model call you
 # pass in, so it has no opinion about who you call. The Anthropic SDK is needed
 # only by examples/live_booking_agent.py and the `-m live` tests.
 live = ["anthropic>=0.117"]
 
 [tool.hatch.version]
-path = "retrail/__init__.py"
+path = "retrial/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["retrail"]
+packages = ["retrial"]
 
 [tool.hatch.build.targets.sdist]
 # Ship what makes the project reviewable and reproducible; leave out local
 # scratch. `prototype/` is deliberately throwaway code (see design doc §8) and
 # does not belong in a distribution.
 include = [
-    "retrail/",
+    "retrial/",
     "tests/",
     "examples/",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
-    "retrail-design-doc.md",
+    "retrial-design-doc.md",
     "pyproject.toml",
 ]
 
@@ -104,7 +104,7 @@ select = ["E", "F", "W", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.10"
-files = ["retrail"]
+files = ["retrial"]
 # The package is fully annotated, and an unannotated function is the way that
 # silently stops being true - it type-checks trivially and exports Any into
 # every caller. So the floor is "every def has a signature".

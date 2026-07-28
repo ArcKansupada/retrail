@@ -78,7 +78,7 @@ def header_row(schema: int, requires: Iterable[str] = ()) -> ExportHeader:
         "schema": schema,
         "requires": list(requires),
         "exported_at": time.time(),
-        "retrail": __version__,
+        "retrial": __version__,
     }
 
 
@@ -203,7 +203,7 @@ def parse_line(text: str, line: int, path: str | None = None) -> ExportRow:
         _check_type(obj, "schema", int, bad)
         obj.setdefault("requires", [])
         obj.setdefault("exported_at", 0.0)
-        obj.setdefault("retrail", "unknown")
+        obj.setdefault("retrial", "unknown")
         if not isinstance(obj["requires"], list) or not all(
             isinstance(r, str) for r in obj["requires"]
         ):

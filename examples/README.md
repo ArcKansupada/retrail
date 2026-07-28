@@ -4,7 +4,7 @@ A toy three-tool booking agent (`search_flight`, `check_budget`, `book_flight`) 
 
 ```bash
 pip install -e .
-retrail init
+retrial init
 ```
 
 ## 1. Record a run
@@ -19,7 +19,7 @@ Recorded session s_23f11ef6dd
 No export step. The decorator logged every step as the loop ran:
 
 ```bash
-$ retrail log s_23f11ef6dd
+$ retrial log s_23f11ef6dd
 session s_23f11ef6dd  (booking-agent)
   status: complete
 
@@ -43,16 +43,16 @@ The flight cost $450. What would the agent have done if it cost $1200?
 $ cat examples/edit_price.json
 {"op": "replace", "path": "/output/0/content", "value": "{\"flight_price\": 1200}"}
 
-$ retrail fork d66697c --agent examples.booking_agent:run_agent --edit-file examples/edit_price.json
+$ retrial fork d66697c --agent examples.booking_agent:run_agent --edit-file examples/edit_price.json
 Forked into session s_afbdbacc45
 ```
 
-`d66697c` is the `search_flight` step. retrail replays everything up to it, splices in the $1200, and **re-enters your real loop** from there.
+`d66697c` is the `search_flight` step. retrial replays everything up to it, splices in the $1200, and **re-enters your real loop** from there.
 
 ## 3. See where they diverged
 
 ```bash
-$ retrail diff s_23f11ef6dd s_afbdbacc45
+$ retrial diff s_23f11ef6dd s_afbdbacc45
 common ancestor: s_23f11ef6dd
 shared prefix:   1 step(s), through 578922a
 
@@ -81,7 +81,7 @@ final answer
 Record a run while the airline API is "down":
 
 ```bash
-$ RETRAIL_DEMO_OUTAGE=1 python examples/booking_agent.py
+$ RETRIAL_DEMO_OUTAGE=1 python examples/booking_agent.py
 I couldn't reach the airline to book that.
 
 Recorded session s_cc6b0dc420
@@ -90,7 +90,7 @@ Recorded session s_cc6b0dc420
 Now the outage is over. Which step doomed that run?
 
 ```bash
-$ retrail bisect s_cc6b0dc420 --check "output contains 'Confirmed'" \
+$ retrial bisect s_cc6b0dc420 --check "output contains 'Confirmed'" \
     --agent examples.booking_agent:run_agent
 
 bisecting s_cc6b0dc420 against: output contains 'Confirmed'
@@ -107,7 +107,7 @@ First step that could not recover: 6becb65
 
 Bisect forks from a step, re-runs the agent for real, and checks whether the failure still happens. Resuming from step 2 the tool gets called again — the outage is over, so it **recovers**. Resuming from step 3 replays the recorded timeout, so it stays broken. The boundary is the culprit.
 
-Each probe is a real re-execution recorded as its own session, so you can `retrail log` any of them. Two probes localized it across five steps.
+Each probe is a real re-execution recorded as its own session, so you can `retrial log` any of them. Two probes localized it across five steps.
 
 `--check` describes what a **good** run looks like, like a test. Also available: `output not contains '...'`, `output matches '<regex>'`.
 
@@ -116,7 +116,7 @@ Each probe is a real re-execution recorded as its own session, so you can `retra
 Bisect explains a run that **failed**. Ablation explains a run that **worked**: which of the recorded facts was the answer load-bearing on?
 
 ```bash
-$ retrail ablate s_e8dda5f4bd --check "output contains 'QX7R2M'" \
+$ retrial ablate s_e8dda5f4bd --check "output contains 'QX7R2M'" \
     --agent examples.booking_agent:run_agent
 
   step 1 (ff9b57a) search_flight: outcome FLIPPED   -> possibly load-bearing
@@ -125,7 +125,7 @@ $ retrail ablate s_e8dda5f4bd --check "output contains 'QX7R2M'" \
 
 It blanks each tool result in turn and re-executes. A tool that *ran* isn't a tool that *mattered* — and the only way to know which is to remove the fact and watch what the agent does. (Both facts matter here, which is the boring correct answer for a three-step agent. See `tests/test_explore.py` for an agent with a tool that runs but is provably *not* load-bearing.)
 
-Note that ablation only works on an agent that copes with a tool returning nothing useful. One that assumes its tools' schema and hard-crashes on a blank result can't be ablated — you'll get `could not probe (KeyError: ...)`, which is retrail telling you your agent has no fallback, not retrail failing.
+Note that ablation only works on an agent that copes with a tool returning nothing useful. One that assumes its tools' schema and hard-crashes on a blank result can't be ablated — you'll get `could not probe (KeyError: ...)`, which is retrial telling you your agent has no fallback, not retrial failing.
 
 **The signal is asymmetric, and the output says so.** "Not load-bearing" is sound: the run reached the same outcome without that fact. "Possibly load-bearing" is weaker — the agent may be reacting to the perturbation itself rather than the value it lost. Ablation rules facts out rigorously, in suggestively.
 
@@ -138,7 +138,7 @@ $ cat fares.json
 ["{\"flight_price\": 200}", "{\"flight_price\": 450}",
  "{\"flight_price\": 550}", "{\"flight_price\": 1400}"]
 
-$ retrail sweep ff9b57a --values-file fares.json --check "output contains 'QX7R2M'" \
+$ retrial sweep ff9b57a --values-file fares.json --check "output contains 'QX7R2M'" \
     --agent examples.booking_agent:run_agent
 
   {"flight_price": 200}:  PASS -> 'Confirmed: AUS-SFO booked for $200, reference QX7R2M.'
@@ -173,7 +173,7 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
 1. **`messages` is a parameter**, not a blank list built inside the function. That's what lets a fork seed your loop with edited history instead of starting over. It's the one non-negotiable convention.
 2. **The model call and tool executor are passed in**, so `@record` can intercept them without monkey-patching your SDK client.
 
-The defaults are what let `retrail fork` and `retrail bisect` call your agent with just the seeded history.
+The defaults are what let `retrial fork` and `retrial bisect` call your agent with just the seeded history.
 
 ## Going live
 

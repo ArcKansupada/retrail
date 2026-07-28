@@ -15,11 +15,11 @@ import json
 import pytest
 from conftest import TOOLS, fake_model, make_executor, raw_agent
 
-from retrail import fork, record
-from retrail.errors import ExportFormatError, SchemaVersionError
-from retrail.portable import dump_line, parse_document
-from retrail.storage import Store
-from retrail.transfer import export, validate
+from retrial import fork, record
+from retrial.errors import ExportFormatError, SchemaVersionError
+from retrial.portable import dump_line, parse_document
+from retrial.storage import Store
+from retrial.transfer import export, validate
 
 PRICE_999 = {
     "op": "replace",
@@ -31,7 +31,7 @@ PRICE_999 = {
 @pytest.fixture
 def source(tmp_path, opening):
     """A store holding a root run and a fork of it."""
-    store = Store(str(tmp_path / "source" / ".retrail" / "sessions.db"))
+    store = Store(str(tmp_path / "source" / ".retrial" / "sessions.db"))
     agent = record(session_name="root-run", store=store)(raw_agent)
     agent(opening, TOOLS, fake_model, make_executor(450))
     root = agent.last_session_id
@@ -49,7 +49,7 @@ def source(tmp_path, opening):
 
 @pytest.fixture
 def empty(tmp_path):
-    store = Store(str(tmp_path / "target" / ".retrail" / "sessions.db"))
+    store = Store(str(tmp_path / "target" / ".retrial" / "sessions.db"))
     yield store
     store.close()
 
@@ -235,7 +235,7 @@ def test_a_different_step_in_the_same_slot_is_refused(source, empty):
 
     # A genuine step from the fork, relabelled onto the root's slot 0, with a
     # sha recomputed so it passes the content check and reaches the conflict.
-    from retrail.sha import compute_sha
+    from retrial.sha import compute_sha
 
     rows = [json.loads(line) for line in lines]
     victim = next(r for r in rows if r["kind"] == "step")
@@ -292,7 +292,7 @@ def test_a_newer_format_declaring_nothing_required_is_read_with_a_warning(
     plan = validate(empty, doc(lines))
 
     assert plan.new_sessions
-    assert any("newer than this retrail" in w for w in plan.warnings)
+    assert any("newer than this retrial" in w for w in plan.warnings)
 
 
 def test_a_newer_format_requiring_an_unknown_feature_is_refused(source, empty):
@@ -306,12 +306,12 @@ def test_a_newer_format_requiring_an_unknown_feature_is_refused(source, empty):
 def test_that_refusal_says_how_to_fix_it(source, empty):
     lines = edited(lines_of(source), 0, format=99, requires=["encrypted-steps"])
 
-    with pytest.raises(ExportFormatError, match="pip install -U retrail"):
+    with pytest.raises(ExportFormatError, match="pip install -U retrial"):
         validate(empty, doc(lines))
 
 
 def test_an_older_format_with_no_translator_is_refused_as_a_bug(source, empty):
-    """Every format retrail has shipped should be readable. If one is not,
+    """Every format retrial has shipped should be readable. If one is not,
     that is a bug and the message says so rather than blaming the file."""
     lines = edited(lines_of(source), 0, format=0)
 
@@ -324,7 +324,7 @@ def test_a_newer_schema_is_refused(source, empty):
     applies to itself."""
     lines = edited(lines_of(source), 0, schema=99)
 
-    with pytest.raises(SchemaVersionError, match="newer retrail"):
+    with pytest.raises(SchemaVersionError, match="newer retrial"):
         validate(empty, doc(lines))
 
 

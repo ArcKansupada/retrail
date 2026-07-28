@@ -6,11 +6,11 @@ name: Publish
 #
 # One-time setup on PyPI, before the first tag:
 #   PyPI -> Publishing -> Add a pending publisher
-#     owner: ArcKansupada   repo: retrail
+#     owner: ArcKansupada   repo: retrial
 #     workflow: publish.yml  environment: pypi
 #
 # Release checklist:
-#   1. bump __version__ in retrail/__init__.py  (the only place it lives)
+#   1. bump __version__ in retrial/__init__.py  (the only place it lives)
 #   2. move the Unreleased section of CHANGELOG.md under the new version
 #   3. git tag v0.1.0 && git push --tags
 
@@ -38,7 +38,7 @@ jobs:
         run: |
           version=$(python -c "import re,pathlib; \
             print(re.search(r'__version__ = \"([^\"]+)\"', \
-            pathlib.Path('retrail/__init__.py').read_text()).group(1))")
+            pathlib.Path('retrial/__init__.py').read_text()).group(1))")
           tag="${GITHUB_REF_NAME#v}"
           if [ "$version" != "$tag" ]; then
             echo "tag $GITHUB_REF_NAME does not match __version__ $version"

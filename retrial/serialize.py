@@ -79,7 +79,7 @@ def to_jsonable(obj: Any, _path: str = "", _seen: frozenset[int] | None = None) 
             return to_jsonable(public, _path, _seen)
 
     raise ReplayIntegrityError(
-        f"cannot serialize {type(obj).__name__} at {_path or '<root>'}. retrail "
+        f"cannot serialize {type(obj).__name__} at {_path or '<root>'}. retrial "
         "records exact state so replays are faithful; storing repr() here would "
         "make the recording a description rather than a recording."
     )

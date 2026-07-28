@@ -194,13 +194,13 @@ def _translate(document: Document, path: str | None) -> tuple[Document, list[str
         if unknown:
             raise ExportFormatError(
                 f"file is format v{found} and requires {', '.join(unknown)}, which "
-                f"this retrail (format v{FORMAT_VERSION}) does not understand. "
-                "Upgrade with `pip install -U retrail`.",
+                f"this retrial (format v{FORMAT_VERSION}) does not understand. "
+                "Upgrade with `pip install -U retrial`.",
                 line=1,
                 path=path,
             )
         return document, [
-            f"file is format v{found}, newer than this retrail's v{FORMAT_VERSION}. "
+            f"file is format v{found}, newer than this retrial's v{FORMAT_VERSION}. "
             "It declares no features this version must understand, so it is being "
             "read anyway - anything unrecognized in it is ignored."
         ]
@@ -209,8 +209,8 @@ def _translate(document: Document, path: str | None) -> tuple[Document, list[str
         translate = _TRANSLATORS.get(found)
         if translate is None:
             raise ExportFormatError(
-                f"file is format v{found}, and this retrail has no translation for "
-                "it. Every format retrail has shipped should be readable; this is "
+                f"file is format v{found}, and this retrial has no translation for "
+                "it. Every format retrial has shipped should be readable; this is "
                 "a bug.",
                 line=1,
                 path=path,

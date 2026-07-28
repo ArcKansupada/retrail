@@ -1,7 +1,7 @@
 """A toy three-tool booking agent you can fork, diff, and bisect immediately.
 
 Deliberately a raw SDK-shaped loop - call the model, execute tool calls, append
-results - because that is retrail's target user.
+results - because that is retrial's target user.
 
 It ships with a scripted `call_model` so you can try everything with no API key
 and no spend. Swap it for the real thing and nothing else changes:
@@ -24,7 +24,7 @@ See examples/README.md for the 60-second tour.
 import json
 import os
 
-from retrail import record
+from retrial import record
 
 TOOLS = [
     {
@@ -84,7 +84,7 @@ def call_model(messages, tools=None):
     payload = json.loads(latest["content"])
 
     if latest["tool_use_id"] == "toolu_search":
-        # Handle a missing fare rather than assuming the schema. `retrail
+        # Handle a missing fare rather than assuming the schema. `retrial
         # ablate` blanks each fact in turn to see which ones matter, so an
         # agent that hard-crashes on a blank result cannot be ablated.
         if "flight_price" not in payload:
@@ -164,11 +164,11 @@ def _run(name, args):
     if name == "check_budget":
         return {"approved": False, "limit": 600, "amount": args["amount"]}
     if name == "book_flight":
-        # Simulates the airline API being down. Set RETRAIL_DEMO_OUTAGE=1 to
+        # Simulates the airline API being down. Set RETRIAL_DEMO_OUTAGE=1 to
         # record a failing run, then bisect it with the variable unset: the
         # outage is over, so re-execution can recover - exactly the transient
         # failure bisect exists to localize.
-        if os.environ.get("RETRAIL_DEMO_OUTAGE"):
+        if os.environ.get("RETRIAL_DEMO_OUTAGE"):
             return {"error": "airline API timed out"}
         return {"confirmation": "QX7R2M", "amount": args["amount"]}
     return {"error": f"unknown tool {name}"}
@@ -183,7 +183,7 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
     2. The model call and the tool executor are passed in, so @record can
        intercept them without monkey-patching the SDK.
 
-    The defaults let `retrail fork --agent ...` and `retrail bisect` call this
+    The defaults let `retrial fork --agent ...` and `retrial bisect` call this
     with only the seeded message list.
     """
     while True:
@@ -198,4 +198,4 @@ if __name__ == "__main__":
     result = run_agent([{"role": "user", "content": "Book me a flight from AUS to SFO."}])
     print(result["content"][-1]["text"])
     print(f"\nRecorded session {run_agent.last_session_id}")
-    print(f"  retrail log {run_agent.last_session_id}")
+    print(f"  retrial log {run_agent.last_session_id}")

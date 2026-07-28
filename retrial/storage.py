@@ -20,12 +20,12 @@ from .errors import AmbiguousSha, NotFound, SchemaVersionError
 from .sha import compute_sha
 from .types import JSON, EditProvenance, Session, SessionStatus, Step, StepType
 
-DEFAULT_DIR = ".retrail"
+DEFAULT_DIR = ".retrial"
 DB_NAME = "sessions.db"
 
 #: Points every command at one store, overriding upward search. Useful for a
 #: CI job or a shell working against a store outside the current tree.
-ENV_VAR = "RETRAIL_DB"
+ENV_VAR = "RETRIAL_DB"
 
 #: Bump when the tables change, and add a migration in `_migrate` for every
 #: version that has ever shipped. Stored in the file itself via
@@ -86,7 +86,7 @@ def find_db_path(start: str | None = None) -> str | None:
 
     Searching upward is what makes the store belong to the *project* rather
     than to whichever directory you happened to be standing in. Without it,
-    `retrail log` run one level down silently created a second, empty database
+    `retrial log` run one level down silently created a second, empty database
     and reported no sessions - while the real trace sat untouched one directory
     up. Recording had the same split: an agent launched from a subdirectory
     wrote somewhere the CLI would never look.
@@ -105,9 +105,9 @@ def find_db_path(start: str | None = None) -> str | None:
 def resolve_db_path(start: str | None = None) -> str:
     """Which database a command should use, in precedence order.
 
-    1. `RETRAIL_DB`, for pointing a whole shell or CI job at one store.
+    1. `RETRIAL_DB`, for pointing a whole shell or CI job at one store.
     2. The nearest existing store at or above `start`.
-    3. `start`/.retrail/sessions.db - create-here, which is what happens on a
+    3. `start`/.retrial/sessions.db - create-here, which is what happens on a
        first run and keeps behaviour unchanged when there is nothing above.
 
     An explicit `--db` outranks all three; the CLI never calls this when the
@@ -128,7 +128,7 @@ def _apply_schema(conn: sqlite3.Connection, path: str) -> None:
     """Bring a database up to SCHEMA_VERSION, or refuse to touch it.
 
     `CREATE TABLE IF NOT EXISTS` on its own is not version handling: it accepts
-    a file written by any other version of retrail without complaint and then
+    a file written by any other version of retrial without complaint and then
     misbehaves later, somewhere else. The stamp turns that into one clear error
     at the point of opening.
     """
@@ -141,13 +141,13 @@ def _apply_schema(conn: sqlite3.Connection, path: str) -> None:
     )
 
     if found > SCHEMA_VERSION:
-        # Newer retrail wrote this. Its tables may have columns this code will
+        # Newer retrial wrote this. Its tables may have columns this code will
         # never read, and writing to it could produce rows that version cannot
         # read back. Refuse rather than corrupt someone's trace.
         raise SchemaVersionError(path, found, SCHEMA_VERSION)
 
     if initialized and found == 0:
-        # Written by retrail 0.1.0, before the marker existed. That layout IS
+        # Written by retrial 0.1.0, before the marker existed. That layout IS
         # v1 - nothing needs rewriting, only labelling. Adopting it silently is
         # right here and only here: the alternative is refusing every database
         # recorded before this feature landed.

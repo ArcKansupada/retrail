@@ -1,7 +1,7 @@
 """The fork `edit` API - structured patch native, callback as escape hatch.
 
 A patch is data, so it can be stored on the fork's session row: that is what
-lets `retrail log` show WHAT you changed, not just where - otherwise two forks
+lets `retrial log` show WHAT you changed, not just where - otherwise two forks
 from the same step with opposite edits are indistinguishable. It is also the
 only shape the CLI can accept, since `--edit-file edit.json` cannot hold a
 lambda.
@@ -20,7 +20,7 @@ import copy
 from collections.abc import Callable
 from typing import Any
 
-from .errors import RetrailError
+from .errors import RetrialError
 from .types import JSON, Edit, EditProvenance, Patch
 
 _MISSING = object()
@@ -29,7 +29,7 @@ _MISSING = object()
 EditFn = Callable[[dict[str, Any]], dict[str, Any]]
 
 
-class PatchError(RetrailError):
+class PatchError(RetrialError):
     pass
 
 
@@ -97,7 +97,7 @@ def _apply_one(doc: JSON, op: Any) -> JSON:
     kind = op.get("op")
     if kind not in ("replace", "add", "remove"):
         raise PatchError(
-            f"unsupported op {kind!r}; retrail supports replace, add, remove"
+            f"unsupported op {kind!r}; retrial supports replace, add, remove"
         )
     pointer = op.get("path")
     if not isinstance(pointer, str):
