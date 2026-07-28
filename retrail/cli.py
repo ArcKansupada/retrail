@@ -112,14 +112,24 @@ def write_data(lines: Iterable[str], destination: str | None) -> None:
 
 
 def read_data(source: str) -> list[str]:
-    """Read an export file as UTF-8. `-` means stdin, for a pipe."""
+    """Read an export file as UTF-8. `-` means stdin, for a pipe.
+
+    Decoded as utf-8-sig, which strips a leading byte-order mark if one is
+    there and is plain utf-8 otherwise. Windows tooling adds a BOM freely -
+    Notepad, PowerShell redirection, a pipe through the shell - and a file that
+    picked one up is still the same file, the way one that gained a trailing
+    newline is. Without this it fails as "Unexpected UTF-8 BOM" on line 1,
+    which points at the encoding and not at the fix.
+    """
     if source == "-":
         stream = getattr(sys.stdin, "buffer", None)
         text = (
-            stream.read().decode("utf-8") if stream is not None else sys.stdin.read()
+            stream.read().decode("utf-8-sig")
+            if stream is not None
+            else sys.stdin.read().lstrip("\ufeff")
         )
         return text.splitlines(keepends=True)
-    with open(source, encoding="utf-8") as handle:
+    with open(source, encoding="utf-8-sig") as handle:
         return handle.readlines()
 
 

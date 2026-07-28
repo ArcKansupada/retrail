@@ -121,10 +121,14 @@ Still needs you:
 ## P2 — features worth adding
 
 **Sharing and archival**
-- [ ] **`retrail export` / `retrail import`** — a session tree (plus its ancestors) as
-      JSONL. This is the collaboration story with no server in it: "here's my trace,
-      fork it yourself and see." Also the only safe way to keep anything before
-      deleting `.retrail/`. High value, low complexity, fits the local-first thesis.
+- [x] **`retrail export` / `retrail import`** *(done 2026-07-27)* — a session tree
+      (plus its ancestors) as JSONL, `export`/`import_` in the Python API too. SHAs
+      survive because session ids are preserved; the import verifies each SHA against
+      its content, is idempotent and incremental, and runs in one transaction.
+      `retrail/portable.py` (format) and `retrail/transfer.py` (store) keep "is this
+      file well formed?" answerable without a database. ~90 tests across five files;
+      the trap worth remembering is that an export is *data*, so it bypasses the
+      cp1252-degrading `echo()` — a replaced glyph would break the step's own SHA.
 - [ ] **`retrail diff --format html|md`** — a pasteable divergence report for a PR or
       an issue. The diff output is the most convincing artifact retrail produces and
       right now it only exists in a terminal.
@@ -218,5 +222,5 @@ Three things mypy found that were latent, not stylistic. All fixed:
 2. ~~Type hints + `py.typed`~~ — **done.**
 3. ~~Store discovery walks up to find `.retrail/`~~ — **done.**
 4. ~~Raise on async agents~~ — **done.**
-5. `retrail export` / `import` *(the sharable-repro feature, cheap to build)*
+5. ~~`retrail export` / `import`~~ — **done.**
 6. `prune` + hiding probe sessions *(the store becomes unreadable within a day of real use)*

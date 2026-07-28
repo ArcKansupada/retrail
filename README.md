@@ -24,7 +24,7 @@ Early but complete end to end: record, fork, diff, and bisect all work, and all 
 **Fastest way in:** the [60-second tour](examples/README.md) — a toy booking agent you can fork, diff, and bisect with **no API key**.
 
 ```bash
-pytest              # 221 offline tests, deterministic and free
+pytest              # 335 offline tests, deterministic and free
 pytest -m live      # 8 tests against the real API (costs ~$0.30)
 ```
 
@@ -288,6 +288,7 @@ The whole product rests on the replay being exactly what happened, so retrail ra
 - If a run **crashed mid-loop**, its trailing tool call can't be forked: the message state after it was never observed.
 - If your agent or its model call is **async**, it refuses to record at all rather than stamp a session `complete` before the loop has run a step.
 - If the database was written by a **newer retrail**, it refuses to open it rather than write rows that version may not read back.
+- If an imported step's **content doesn't match its SHA**, it refuses — a trace that changed in transit is not a recording. Same for a file that would **merge two different runs** under one session ID.
 
 A wrong replay would be worse than no replay.
 
@@ -305,6 +306,8 @@ retrail ablate <session-id> --check EXPR --agent M:F   # which facts a good run 
 retrail sweep <sha> --values-file v.json --agent M:F   # find a threshold; --check optional
 retrail rerun --check EXPR --agent M:F                 # regression-test recorded runs
 retrail cost <session-id>                              # cost/token breakdown per step
+retrail export <session-id> > trace.jsonl             # a session + its ancestors, portable
+retrail import trace.jsonl                            # read one back, all of it or none
 ```
 
 SHA prefix matching applies throughout. An ambiguous prefix is an error asking for a longer one — same as git.
@@ -320,13 +323,30 @@ Commands search upward for `.retrail/` from the current directory, so running on
 
 `retrail init` is the exception: like `git init`, it always creates a store *here*. If that shadows one further up, it says so.
 
+### Sharing a trace
+
+`retrail export` writes a session and its ancestors to a JSONL file; `retrail import` reads one into another store. This is the collaboration story with no server in it — *here is my trace, fork it yourself and see* — and the only lossless way to keep a session before deleting `.retrail/`.
+
+```bash
+retrail export s_ab12cd34ef > trace.jsonl   # the fork plus every ancestor it needs
+retrail export --all -o backup.jsonl        # the whole store
+cat trace.jsonl | retrail import -           # from a pipe, or a path
+```
+
+A fork travels with its ancestors, because a fork without its parents can't be diffed or replayed. Descendants don't travel — exporting a root doesn't hand over every experiment you ran on top of it.
+
+Import is safe to repeat. Every step's SHA is recomputed and checked, so a file altered in transit is refused rather than trusted; sessions already present with identical content are skipped, so re-importing the same file is a no-op and a later export appends only what's new. It happens in one transaction — a file rejected on its last line leaves the store exactly as it was. Session IDs are preserved, so a SHA you quote in a code review means the same step on both machines; two different runs claiming one ID is a refusal, not a silent merge (`--db` puts the incoming trace in a separate store instead).
+
 ## Python API
 
 ```python
 from retrail import record, fork, diff, bisect, ablate, sweep, rerun, trajectory, Store
+from retrail import export, import_   # the same JSONL transfer, in-process
 ```
 
 `trajectory(store, session_id)` materializes the full path from root to tip, walking the parent chain and tagging each step `replayed` or `live`.
+
+`export(store, session_ids)` yields the file's lines; `import_(store, lines)` reads them back and returns a summary of what changed.
 
 ### Typed
 

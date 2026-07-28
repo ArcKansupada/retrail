@@ -11,6 +11,17 @@ existing key will not silently change meaning.
 ## [Unreleased]
 
 ### Added
+- **`retrail export` / `retrail import`**, and `export` / `import_` in the
+  Python API. A session and its ancestors travel as a JSONL file — the
+  collaboration story with no server in it, and the only lossless way to keep a
+  trace before deleting `.retrail/`. A fork carries its ancestors (a fork
+  without its parents can't be diffed or replayed); descendants stay behind.
+  Import is idempotent and incremental: every step's SHA is recomputed and
+  checked, so a file altered in transit is refused rather than trusted; matching
+  content is skipped; the whole read is one transaction, so a file rejected on
+  its last line leaves the store untouched. Session IDs are preserved, so a SHA
+  stays a shared handle across machines — two runs claiming one ID is a refusal,
+  not a silent merge. Adds `ExportFormatError`.
 - **The store is found by searching upward**, the way git finds `.git/`. A
   command run in a subdirectory now uses the project's store instead of quietly
   creating a second, empty one beside itself — see *Fixed* below. `RETRAIL_DB`

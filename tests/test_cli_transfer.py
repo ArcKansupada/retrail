@@ -206,6 +206,40 @@ def test_import_reads_stdin(project, tmp_path):
         assert len(store.list_sessions()) == 2
 
 
+def test_a_file_with_a_utf8_bom_still_imports(project, tmp_path):
+    """Windows tooling adds a BOM freely - Notepad, Out-File, a shell pipe.
+
+    A file that picked one up is still the same file, the way one that gained a
+    trailing newline is. Without utf-8-sig this failed on line 1 with a message
+    about the encoding rather than the fix.
+    """
+    path = export_to(project, "--all")
+    with open(path, "rb") as handle:
+        body = handle.read()
+    bom_path = tmp_path / "with_bom.jsonl"
+    bom_path.write_bytes(b"\xef\xbb\xbf" + body)
+    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+
+    result = run("--db", str(target), "import", str(bom_path))
+
+    assert result.exit_code == 0, result.output
+    with Store(str(target)) as store:
+        assert len(store.list_sessions()) == 2
+
+
+def test_a_bom_on_stdin_still_imports(project, tmp_path):
+    path = export_to(project, "--all")
+    with open(path, "rb") as handle:
+        piped = ("\ufeff" + handle.read().decode("utf-8"))
+    target = tmp_path / "dest" / ".retrail" / "sessions.db"
+
+    result = run("--db", str(target), "import", "-", input=piped)
+
+    assert result.exit_code == 0, result.output
+    with Store(str(target)) as store:
+        assert len(store.list_sessions()) == 2
+
+
 def test_importing_twice_says_nothing_changed(project, tmp_path):
     path = export_to(project, "--all")
     target = tmp_path / "dest" / ".retrail" / "sessions.db"

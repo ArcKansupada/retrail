@@ -23,6 +23,7 @@ from .record import record
 from .regress import rerun
 from .storage import Store
 from .trajectory import trajectory
+from .transfer import export, import_
 
 # The shapes every function above returns. Re-exported so annotating your own
 # code never means importing from a private-looking submodule. See
@@ -74,6 +75,8 @@ __all__ = [
     "cost_of",
     "trajectory_cost",
     "trajectory",
+    "export",
+    "import_",
     "apply_patch",
     "Store",
     "RetrailError",
