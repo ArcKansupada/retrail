@@ -12,6 +12,8 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, cast
 
 from .errors import AmbiguousSha, NotFound, SchemaVersionError
@@ -227,6 +229,26 @@ class Store:
             # attempt fails for a second, unrelated-looking reason.
             self.conn.close()
             raise
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Several writes that must land together, or not at all.
+
+        Every other method here commits its own statement, which is right for
+        recording: a run that crashes mid-loop keeps the steps it managed. An
+        import is the opposite - a file rejected on its last line must leave
+        the store exactly as it was, with no half a trace to reason about.
+
+        Holds the lock for the whole block, so a concurrent writer cannot
+        commit inside this transaction and take the rows with it.
+        """
+        with self._lock:
+            try:
+                yield self.conn
+                self.conn.commit()
+            except BaseException:
+                self.conn.rollback()
+                raise
 
     def close(self) -> None:
         with self._lock:

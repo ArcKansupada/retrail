@@ -248,9 +248,14 @@ guard removed once to confirm the tests fail.
    step, with no honest way to choose a copy), and returns a `Document`
    carrying line numbers — a sha mismatch is found after parsing, by which
    point a row is a bare dict with no memory of where it came from.
-4. `import_()` write pass — insert/skip/refuse, status advance, atomicity.
-   Tests: idempotent re-import, incremental append, conflict refused, failed
-   import leaves the store untouched.
+4. ~~`import_()` write pass — insert/skip/refuse, status advance, atomicity.~~
+   **Done.** 15 tests. Needed one addition to `Store`: a `transaction()`
+   context manager, because every other method commits its own statement —
+   right for recording, wrong for an import that must land whole. Steps are
+   written with direct SQL rather than `add_step`, which would both commit per
+   row and mint a fresh sha and timestamp; the originals have to survive.
+   **The promise test passes**: export a fork, import into an empty store, and
+   `diff` and `trajectory` agree on both sides.
 5. CLI wiring: `export`, `import`, stdout/stdin, stderr for diagnostics.
 6. README section, CHANGELOG, and delete this file.
 

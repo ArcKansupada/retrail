@@ -14,6 +14,7 @@ would send it for.
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 
@@ -23,9 +24,11 @@ from .portable import (
     Document,
     dump_line,
     header_row,
+    parse_document,
     session_row,
     step_row,
 )
+from .serialize import canonical_json
 from .sha import compute_sha
 from .storage import SCHEMA_VERSION, Store, schema_version
 from .types import ExportSession, ExportStep, Session, SessionStatus
@@ -367,6 +370,113 @@ def _check_parents(
                 session["id"],
                 path,
             ) from exc
+
+
+# -- import: the write pass -----------------------------------------------------
+
+
+@dataclass
+class ImportResult:
+    """What an import did. Every count is a row, not a file."""
+
+    sessions_added: int = 0
+    steps_added: int = 0
+    #: Already present with identical content - the file coming home.
+    sessions_skipped: int = 0
+    steps_skipped: int = 0
+    status_updated: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def changed_nothing(self) -> bool:
+        return not (self.sessions_added or self.steps_added or self.status_updated)
+
+
+def import_(
+    store: Store, source: Iterable[str] | Document, path: str | None = None
+) -> ImportResult:
+    """Read an export into `store`. All of it, or none of it.
+
+    `source` is either the file's lines or an already-parsed `Document`.
+
+    Everything is decided before anything is written (see `validate`), and the
+    writing itself runs in one transaction. A file that is rejected - for a
+    sha that does not match, a parent that is nowhere, two runs claiming one
+    id - leaves the store byte for byte as it was.
+    """
+    document = source if isinstance(source, Document) else parse_document(source, path)
+    plan = validate(store, document, path)
+
+    result = ImportResult(
+        sessions_skipped=len(plan.skipped_sessions),
+        steps_skipped=len(plan.skipped_steps),
+        warnings=list(plan.warnings),
+    )
+    if plan.is_empty:
+        return result
+
+    with store.transaction() as conn:
+        # Sessions first, and ancestors before forks - both guaranteed by the
+        # parse - so the foreign keys resolve as each row lands rather than
+        # needing the constraint deferred.
+        for session in plan.new_sessions:
+            _insert_session(conn, session)
+            result.sessions_added += 1
+        for step in plan.new_steps:
+            _insert_step(conn, step)
+            result.steps_added += 1
+        for session_id, status in plan.status_updates:
+            conn.execute(
+                "UPDATE sessions SET status = ? WHERE id = ?", (status, session_id)
+            )
+            result.status_updated += 1
+
+    return result
+
+
+def _insert_session(conn: sqlite3.Connection, session: ExportSession) -> None:
+    conn.execute(
+        "INSERT INTO sessions (id, name, parent_session_id, parent_sha, "
+        "forked_at_step, edit_json, created_at, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            session["id"],
+            session["name"],
+            session["parent_session_id"],
+            session["parent_sha"],
+            session["forked_at_step"],
+            json.dumps(session["edit"]) if session["edit"] is not None else None,
+            session["created_at"],
+            session["status"],
+        ),
+    )
+
+
+def _insert_step(conn: sqlite3.Connection, step: ExportStep) -> None:
+    """Written directly rather than through `Store.add_step`.
+
+    add_step commits per row, which would defeat the transaction, and it mints
+    a fresh sha and created_at. Both must survive: the sha is the handle the
+    step is quoted by on the machine it came from, and the timestamp is when
+    the run happened, not when it arrived.
+    """
+    conn.execute(
+        "INSERT INTO steps (sha, session_id, step_number, step_type, "
+        "input_json, output_json, tokens_used, cost_usd, duration_ms, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            step["sha"],
+            step["session_id"],
+            step["step_number"],
+            step["step_type"],
+            canonical_json(step["input"]),
+            canonical_json(step["output"]),
+            step["tokens_used"],
+            step["cost_usd"],
+            step["duration_ms"],
+            step["created_at"],
+        ),
+    )
 
 
 def _chain(store: Store, session_id: str, ancestors: bool) -> list[Session]:
