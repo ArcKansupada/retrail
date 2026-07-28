@@ -191,8 +191,21 @@ def test_a_step_for_an_undeclared_session_is_refused():
 
 
 def test_step_numbers_must_advance():
+    # Distinct shas, or the duplicate-sha check below fires first and this
+    # would be testing the wrong guard.
     with pytest.raises(ExportFormatError, match="does not advance"):
-        parse_document(document(a_session(), a_step(number=1), a_step(number=1)))
+        parse_document(
+            document(
+                a_session(), a_step(number=1), a_step(number=1, sha="f" * 64)
+            )
+        )
+
+
+def test_a_repeated_step_is_refused():
+    """A sha covers session, step number and content, so two rows sharing one
+    are the same step written twice - with no honest way to pick a copy."""
+    with pytest.raises(ExportFormatError, match="appears twice"):
+        parse_document(document(a_session(), a_step(number=0), a_step(number=0)))
 
 
 def test_a_sessions_steps_must_be_contiguous():

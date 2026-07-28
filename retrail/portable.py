@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from .errors import ExportFormatError
@@ -145,6 +146,29 @@ def dump_document(
 # -- reading -------------------------------------------------------------------
 
 
+@dataclass
+class Document:
+    """A parsed export file.
+
+    Unpacks as `header, sessions, steps`, which is all most callers want. It
+    also carries where each row came from: a validation failure discovered
+    after parsing - a step whose content does not match its sha - still needs
+    to name a line, and by then the row is just a dict with no memory of one.
+    """
+
+    header: ExportHeader
+    sessions: list[ExportSession]
+    steps: list[ExportStep]
+    #: Session id or step sha -> line number. Both are unique within a file.
+    lines: dict[str, int] = field(default_factory=dict)
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter((self.header, self.sessions, self.steps))
+
+    def line_of(self, key: str) -> int | None:
+        return self.lines.get(key)
+
+
 def parse_line(text: str, line: int, path: str | None = None) -> ExportRow:
     """One line into a row, or refuse with the line number.
 
@@ -209,9 +233,7 @@ def parse_line(text: str, line: int, path: str | None = None) -> ExportRow:
     return cast(ExportStep, obj)
 
 
-def parse_document(
-    lines: Iterable[str], path: str | None = None
-) -> tuple[ExportHeader, list[ExportSession], list[ExportStep]]:
+def parse_document(lines: Iterable[str], path: str | None = None) -> Document:
     """A whole file into its three parts, with the ordering rules enforced.
 
     Blank lines are skipped: a file that gained a trailing newline in transit
@@ -226,7 +248,9 @@ def parse_document(
     sessions: list[ExportSession] = []
     steps: list[ExportStep] = []
     seen_sessions: set[str] = set()
+    seen_shas: set[str] = set()
     session_lines: list[int] = []
+    row_lines: dict[str, int] = {}
     number = 0
 
     for number, text in enumerate(lines, start=1):
@@ -259,9 +283,15 @@ def parse_document(
             seen_sessions.add(session["id"])
             sessions.append(session)
             session_lines.append(number)
+            row_lines[session["id"]] = number
             continue
 
         step = cast(ExportStep, row)
+        if step["sha"] in seen_shas:
+            # A sha covers session, step number, and content, so two rows
+            # sharing one are the same step written twice - and there is no
+            # honest way to pick which copy was meant.
+            raise bad(f"step {step['sha'][:12]} appears twice")
         if step["session_id"] not in seen_sessions:
             raise bad(
                 f"step {step['sha'][:12]} belongs to session {step['session_id']}, "
@@ -281,6 +311,8 @@ def parse_document(
                     "block; a session's steps must be contiguous"
                 )
         steps.append(step)
+        seen_shas.add(step["sha"])
+        row_lines[step["sha"]] = number
 
     if header is None:
         raise ExportFormatError(
@@ -304,7 +336,7 @@ def parse_document(
                 line=session_lines[index],
                 path=path,
             )
-    return header, sessions, steps
+    return Document(header, sessions, steps, row_lines)
 
 
 # -- field checks --------------------------------------------------------------

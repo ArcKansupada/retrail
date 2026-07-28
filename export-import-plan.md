@@ -240,8 +240,14 @@ guard removed once to confirm the tests fail.
    `--no-ancestors` produced files our own parser rejected. "The parent comes
    first" belongs to the format; "the parent is here at all" is import's
    question, since the receiving store may already hold it.
-3. `import_()` validation pass — SHA verification, referential integrity,
-   ordering, version handling. Tests: every refusal, each with its own file.
+3. ~~`import_()` validation pass — SHA verification, referential integrity,
+   ordering, version handling.~~ **Done.** `validate()` returns an `ImportPlan`
+   and writes nothing; 21 tests, and each of the seven guards was disabled in
+   turn to confirm which tests hold it. Two additions the plan had not called
+   for: `parse_document` now refuses a repeated step sha (two rows for one
+   step, with no honest way to choose a copy), and returns a `Document`
+   carrying line numbers — a sha mismatch is found after parsing, by which
+   point a row is a bare dict with no memory of where it came from.
 4. `import_()` write pass — insert/skip/refuse, status advance, atomicity.
    Tests: idempotent re-import, incremental append, conflict refused, failed
    import leaves the store untouched.
