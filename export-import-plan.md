@@ -69,8 +69,15 @@ the child that references it:
 ```json
 {"kind": "step", "sha": "9f2c...", "session_id": "s_ab12cd34ef",
  "step_number": 0, "step_type": "model_call", "input": {...}, "output": {...},
- "tokens_used": 812, "cost_usd": 0.0041, "duration_ms": 1830.4}
+ "tokens_used": 812, "cost_usd": 0.0041, "duration_ms": 1830.4,
+ "created_at": 1753660001.0}
 ```
+
+`created_at` is carried so an imported trace reports when the run actually
+happened rather than when it arrived — the alternative is a store full of
+sessions that all claim to be from the day someone imported them. The step's
+local `id` is *not* carried: it is an autoincrement rowid, meaningless in
+another database.
 
 `input`/`output` are the parsed objects, not the stored JSON strings — the file
 is readable, and re-serializing through `canonical_json` on import reproduces
@@ -222,8 +229,11 @@ matching the existing errors (`SchemaVersionError`, the `@record` refusals).
 Each step is a commit, each verified on 3.13 and the 3.10 floor, each with the
 guard removed once to confirm the tests fail.
 
-1. `retrail/portable.py` — header/session/step row shapes in `types.py`,
-   serialize and parse, ordering guarantee. Tests: round trip of shapes.
+1. ~~`retrail/portable.py` — header/session/step row shapes in `types.py`,
+   serialize and parse, ordering guarantee.~~ **Done.** 30 tests. Ordering
+   turned out to need a third rule the plan had not named: a session's steps
+   must be *contiguous*, not merely ascending, or a streaming importer has to
+   buffer the whole file to know when a session is finished.
 2. `export()` + ancestor walk. Tests: ancestors included, descendants excluded,
    ordering enforced, `--no-ancestors` warns.
 3. `import_()` validation pass — SHA verification, referential integrity,

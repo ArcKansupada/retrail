@@ -48,6 +48,10 @@ __all__ = [
     "Divergence",
     "DiffFinal",
     "DiffResult",
+    "ExportHeader",
+    "ExportSession",
+    "ExportStep",
+    "ExportRow",
 ]
 
 #: An arbitrary recorded payload: message history, model response, tool result.
@@ -376,3 +380,77 @@ class DiffResult(TypedDict):
     blocks: list[DiffBlock]
     final: DiffFinal
     identical: bool
+
+
+# -- the portable format ------------------------------------------------------
+#
+# One JSON object per line, so a file streams, appends, diffs in a PR, and
+# survives a truncated write with everything before the tear still readable.
+# `kind` discriminates the three row types. See portable.py.
+
+
+class ExportHeader(TypedDict):
+    """Line 1 of every export. Says how to read the rest."""
+
+    kind: Literal["header"]
+    #: Version of this file layout. Older ones are translated forward on
+    #: import; see portable.py.
+    format: int
+    #: The database SCHEMA_VERSION these rows came from.
+    schema: int
+    #: Features an importer MUST understand to read this file correctly. This
+    #: is what makes forward compatibility safe rather than optimistic: an
+    #: unrecognized field NOT named here is inert and can be carried through,
+    #: while anything named here that we do not know is a refusal.
+    requires: list[str]
+    exported_at: float
+    #: Producing version, for bug reports. Never used to make decisions - that
+    #: is what `format` and `requires` are for.
+    retrail: str
+
+
+class ExportSession(TypedDict):
+    """A session row. Ancestors appear before the forks that reference them."""
+
+    kind: Literal["session"]
+    id: str
+    name: str | None
+    parent_session_id: str | None
+    parent_sha: str | None
+    forked_at_step: int | None
+    #: Parsed, unlike `Session.edit_json` - the file is meant to be readable.
+    edit: EditProvenance | None
+    created_at: float
+    status: SessionStatus
+
+
+class ExportStep(TypedDict):
+    """A step row, grouped by session and ascending by step_number.
+
+    No `id`: that is a local autoincrement rowid, meaningless in another store.
+    `sha` IS carried, and survives the trip intact - it hashes `session_id`
+    among other things, and import preserves session ids precisely so that
+    a step stays quotable by the same handle on both machines.
+    """
+
+    kind: Literal["step"]
+    sha: str
+    session_id: str
+    step_number: int
+    step_type: StepType
+    #: Parsed objects, not the stored JSON strings. Re-serializing them through
+    #: `canonical_json` on import reproduces the exact bytes the sha was
+    #: computed over, which is what makes the sha checkable rather than merely
+    #: copied.
+    input: JSON
+    output: JSON
+    tokens_used: int | None
+    cost_usd: float | None
+    duration_ms: float | None
+    #: When it was recorded, carried so an imported trace reports when it
+    #: actually happened rather than when it arrived.
+    created_at: float
+
+
+#: One line of an export file.
+ExportRow = ExportHeader | ExportSession | ExportStep

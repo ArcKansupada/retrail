@@ -8,6 +8,7 @@ from .bisect import bisect
 from .diff import diff
 from .errors import (
     AmbiguousSha,
+    ExportFormatError,
     IntegrationError,
     NotFound,
     ReplayIntegrityError,
@@ -40,6 +41,10 @@ from .types import (
     Divergence,
     Edit,
     EditProvenance,
+    ExportHeader,
+    ExportRow,
+    ExportSession,
+    ExportStep,
     Origin,
     Patch,
     PatchOp,
@@ -77,6 +82,7 @@ __all__ = [
     "ReplayIntegrityError",
     "IntegrationError",
     "SchemaVersionError",
+    "ExportFormatError",
     # types
     "JSON",
     "AblateProbe",
@@ -91,6 +97,10 @@ __all__ = [
     "Divergence",
     "Edit",
     "EditProvenance",
+    "ExportHeader",
+    "ExportRow",
+    "ExportSession",
+    "ExportStep",
     "Origin",
     "Patch",
     "PatchOp",

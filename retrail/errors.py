@@ -40,6 +40,29 @@ class IntegrationError(RetrailError):
     """The user's agent function doesn't meet the integration contract."""
 
 
+class ExportFormatError(RetrailError):
+    """An export file cannot be read as what it claims to be.
+
+    Always carries the line, because the failures this covers - a malformed
+    row, a step whose sha does not match its content, a parent referenced
+    before it is defined - are one line in a thousand, and "somewhere in
+    trace.jsonl" is not a report anyone can act on.
+    """
+
+    def __init__(self, message: str, line: int | None = None, path: str | None = None) -> None:
+        self.message = message
+        self.line = line
+        self.path = path
+        where = ""
+        if path is not None and line is not None:
+            where = f"{path}:{line}: "
+        elif line is not None:
+            where = f"line {line}: "
+        elif path is not None:
+            where = f"{path}: "
+        super().__init__(f"{where}{message}")
+
+
 class SchemaVersionError(RetrailError):
     """The database on disk was written by a different retrail schema.
 
