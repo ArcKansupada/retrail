@@ -256,7 +256,13 @@ guard removed once to confirm the tests fail.
    row and mint a fresh sha and timestamp; the originals have to survive.
    **The promise test passes**: export a fork, import into an empty store, and
    `diff` and `trajectory` agree on both sides.
-5. CLI wiring: `export`, `import`, stdout/stdin, stderr for diagnostics.
+5. ~~CLI wiring: `export`, `import`, stdout/stdin, stderr for diagnostics.~~
+   **Done.** 15 tests, plus 4 added to the encoding guard. The trap the plan
+   had not spotted: an export is *data*, so it must not go through `echo()`,
+   which degrades characters the console cannot encode. On cp1252 a model's
+   emoji would become `?`, the step would stop hashing to its own sha, and the
+   file would be refused by its own importer. `write_data` encodes UTF-8
+   explicitly. Verified on a real `chcp 1252` console, not just in tests.
 6. README section, CHANGELOG, and delete this file.
 
 **The test that matters most** and should exist before step 5 is done: export a

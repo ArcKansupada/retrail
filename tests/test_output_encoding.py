@@ -118,15 +118,86 @@ def test_echo_passes_unicode_through_on_a_utf8_console(monkeypatch):
     assert "✅" in out
 
 
+#: The only two calls allowed to reach click directly - the bodies of echo()
+#: and warn(). Both degrade un-encodable characters first; the tests below
+#: prove it for each, so this list stays earned rather than granted.
+GUARDED_CALLS = ("click.echo(text)", "click.echo(text, err=True)")
+
+
 def test_every_cli_print_goes_through_echo():
-    """One raw click.echo would reopen the hole. Only echo() itself may call it."""
+    """One raw click.echo would reopen the hole."""
     source = (PACKAGE / "cli.py").read_text(encoding="utf-8")
     raw = [
         number
         for number, line in enumerate(source.splitlines(), 1)
-        if "click.echo(" in line and "click.echo(text)" not in line
+        if "click.echo(" in line and not any(call in line for call in GUARDED_CALLS)
     ]
     assert not raw, (
-        f"cli.py calls click.echo directly on line(s) {raw}. Use echo() so model "
-        "output can't crash the command printing it."
+        f"cli.py calls click.echo directly on line(s) {raw}. Use echo() or warn() "
+        "so model output can't crash the command printing it."
     )
+
+
+def test_warn_degrades_like_echo(monkeypatch):
+    """warn() is echo() for stderr, and gets the same protection.
+
+    Diagnostics are downstream of model output too - the note naming a session
+    can carry whatever the model called it."""
+    from retrail.cli import warn
+
+    console = FakeConsole("cp1252")
+    monkeypatch.setattr("retrail.cli.sys.stderr", console)
+    monkeypatch.setattr("click.utils._default_text_stderr", lambda: console)
+
+    warn("Booked ✅ for €450 \U0001f6eb")
+
+    out = console.getvalue()
+    assert "Booked" in out and "450" in out
+    out.encode("cp1252")
+
+
+def test_warn_leaves_encodable_text_untouched(monkeypatch):
+    from retrail.cli import warn
+
+    console = FakeConsole("cp1252")
+    monkeypatch.setattr("retrail.cli.sys.stderr", console)
+    monkeypatch.setattr("click.utils._default_text_stderr", lambda: console)
+
+    warn("note: a store already exists above this directory")
+
+    assert console.getvalue() == "note: a store already exists above this directory\n"
+
+
+def test_export_data_deliberately_bypasses_echo():
+    """The one place that must NOT degrade.
+
+    An export is data. A replaced character would change a step's content so
+    it no longer hashes to its own sha, and the file would be refused by its
+    own importer. write_data encodes UTF-8 explicitly for exactly this reason,
+    and this test exists so nobody 'fixes' it into echo() later.
+    """
+    import ast
+
+    source = (PACKAGE / "cli.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    write_data = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "write_data"
+    )
+
+    # The AST, not the text: the docstring explains why it avoids echo, and a
+    # substring check would trip over its own explanation.
+    called = {
+        node.func.id
+        for node in ast.walk(write_data)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "echo" not in called and "warn" not in called
+
+    utf8 = [
+        node.value
+        for node in ast.walk(write_data)
+        if isinstance(node, ast.Constant) and node.value == "utf-8"
+    ]
+    assert len(utf8) >= 2, "both the file and the stdout path must name utf-8"

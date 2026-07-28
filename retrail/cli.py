@@ -6,6 +6,7 @@ import importlib
 import json
 import os
 import sys
+from collections.abc import Iterable
 from typing import Any
 
 import click
@@ -29,6 +30,8 @@ from .storage import (
     resolve_db_path,
 )
 from .trajectory import trajectory
+from .transfer import export as export_sessions
+from .transfer import import_ as import_document
 from .types import (
     AblateProbe,
     AblateResult,
@@ -70,6 +73,54 @@ def echo(text: object = "") -> None:
     except (UnicodeEncodeError, LookupError):
         text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
     click.echo(text)
+
+
+def warn(text: object = "") -> None:
+    """Diagnostics, on stderr, so a piped export stays a clean file."""
+    text = str(text)
+    encoding = getattr(sys.stderr, "encoding", None) or "utf-8"
+    try:
+        text.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        text = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+    click.echo(text, err=True)
+
+
+def write_data(lines: Iterable[str], destination: str | None) -> None:
+    """Write export lines as UTF-8, whatever the console thinks it is.
+
+    Deliberately not `echo()`. That degrades characters the terminal cannot
+    encode, which is right for display and catastrophic here: on a cp1252
+    console a model's emoji would be replaced with '?', the step's content
+    would no longer hash to its recorded sha, and the file would be refused on
+    import - or worse, imported somewhere that skipped the check. An export is
+    data, not output.
+    """
+    if destination is not None:
+        with open(destination, "w", encoding="utf-8", newline="\n") as handle:
+            handle.writelines(lines)
+        return
+
+    stream = getattr(sys.stdout, "buffer", None)
+    if stream is None:  # a text-only stream, e.g. under some test harnesses
+        for line in lines:
+            sys.stdout.write(line)
+        return
+    for line in lines:
+        stream.write(line.encode("utf-8"))
+    stream.flush()
+
+
+def read_data(source: str) -> list[str]:
+    """Read an export file as UTF-8. `-` means stdin, for a pipe."""
+    if source == "-":
+        stream = getattr(sys.stdin, "buffer", None)
+        text = (
+            stream.read().decode("utf-8") if stream is not None else sys.stdin.read()
+        )
+        return text.splitlines(keepends=True)
+    with open(source, encoding="utf-8") as handle:
+        return handle.readlines()
 
 
 def _glyphs() -> dict[str, str]:
@@ -315,6 +366,99 @@ def show(ctx: click.Context, sha: str) -> None:
         echo(_indent(json.dumps(step["input"], indent=2)))
         echo("\noutput")
         echo(_indent(json.dumps(step["output"], indent=2)))
+
+
+@cli.command()
+@click.argument("session_ids", nargs=-1)
+@click.option("--all", "everything", is_flag=True, help="Export the whole store.")
+@click.option(
+    "--no-ancestors",
+    is_flag=True,
+    help="Send only the named sessions. The result is not independently usable.",
+)
+@click.option(
+    "-o",
+    "--output",
+    default=None,
+    metavar="FILE",
+    help="Write here instead of stdout.",
+)
+@click.pass_context
+def export(
+    ctx: click.Context,
+    session_ids: tuple[str, ...],
+    everything: bool,
+    no_ancestors: bool,
+    output: str | None,
+) -> None:
+    """Write sessions to a portable file, ancestors included.
+
+    Ancestors travel by default because a fork without its parents cannot be
+    diffed or replayed - the two things you would send it for. Descendants
+    never travel: exporting a root does not hand over the experiments run on
+    top of it.
+
+        retrail export s_ab12cd34ef > trace.jsonl
+        retrail export --all -o backup.jsonl
+    """
+    if everything and session_ids:
+        raise click.UsageError("give session ids or --all, not both.")
+    if not everything and not session_ids:
+        raise click.UsageError("name a session to export, or pass --all.")
+
+    with _store(ctx) as store:
+        lines = export_sessions(
+            store,
+            None if everything else list(session_ids),
+            ancestors=not no_ancestors,
+        )
+        # Diagnostics on stderr, so `retrail export s_x | gh gist create -`
+        # sends a file and not a file with a warning in it.
+        if no_ancestors:
+            warn(
+                "note: --no-ancestors, so any parent is named but not included. "
+                "This file only imports into a store that already has them."
+            )
+        write_data(lines, output)
+        if output:
+            warn(f"Wrote {output}")
+
+
+@cli.command(name="import")
+@click.argument("source", type=click.Path())
+@click.pass_context
+def import_cmd(ctx: click.Context, source: str) -> None:
+    """Read an export back into this store. All of it, or none of it.
+
+    Every step's SHA is recomputed and checked, so a file altered in transit
+    is refused rather than trusted. Sessions already here with identical
+    content are skipped, which makes re-importing the same file a no-op.
+
+        retrail import trace.jsonl
+        cat trace.jsonl | retrail import -
+    """
+    with _store(ctx) as store:
+        result = import_document(store, read_data(source), path=None if source == "-" else source)
+
+    for warning in result.warnings:
+        warn(f"warning: {warning}")
+
+    if result.changed_nothing:
+        echo("Already up to date - nothing in that file is new here.")
+        return
+
+    parts = [
+        f"{result.sessions_added} session(s)",
+        f"{result.steps_added} step(s)",
+    ]
+    echo(f"Imported {', '.join(parts)}.")
+    if result.status_updated:
+        echo(f"Updated the status of {result.status_updated} session(s).")
+    if result.sessions_skipped or result.steps_skipped:
+        echo(
+            f"Skipped {result.sessions_skipped} session(s) and "
+            f"{result.steps_skipped} step(s) already present."
+        )
 
 
 def _indent(text: str, by: str = "  ") -> str:
