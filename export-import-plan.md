@@ -234,8 +234,12 @@ guard removed once to confirm the tests fail.
    turned out to need a third rule the plan had not named: a session's steps
    must be *contiguous*, not merely ascending, or a streaming importer has to
    buffer the whole file to know when a session is finished.
-2. `export()` + ancestor walk. Tests: ancestors included, descendants excluded,
-   ordering enforced, `--no-ancestors` warns.
+2. ~~`export()` + ancestor walk.~~ **Done.** 17 tests, in `retrail/transfer.py`.
+   Building it corrected step 1: `parse_document` had been refusing a session
+   whose parent is absent *entirely*, which conflated two rules and meant
+   `--no-ancestors` produced files our own parser rejected. "The parent comes
+   first" belongs to the format; "the parent is here at all" is import's
+   question, since the receiving store may already hold it.
 3. `import_()` validation pass — SHA verification, referential integrity,
    ordering, version handling. Tests: every refusal, each with its own file.
 4. `import_()` write pass — insert/skip/refuse, status advance, atomicity.

@@ -164,10 +164,20 @@ def test_a_session_after_a_step_is_refused():
 
 
 def test_a_parent_defined_after_its_fork_is_refused():
-    with pytest.raises(ExportFormatError, match="ancestors must come first"):
+    with pytest.raises(ExportFormatError, match="defined later in the file"):
         parse_document(
             document(a_session("s_fork00002", parent="s_root00001"), a_session())
         )
+
+
+def test_a_parent_absent_from_the_file_is_allowed():
+    """`--no-ancestors` produces exactly this, and the store may already hold
+    the parent. Whether it does is import's question, not the format's - and
+    refusing here would mean our own exporter writes files we cannot read."""
+    header, sessions, steps = parse_document(
+        document(a_session("s_fork00002", parent="s_root00001"))
+    )
+    assert sessions[0]["parent_session_id"] == "s_root00001"
 
 
 def test_a_duplicate_session_is_refused():

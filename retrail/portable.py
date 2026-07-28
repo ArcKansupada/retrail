@@ -226,6 +226,7 @@ def parse_document(
     sessions: list[ExportSession] = []
     steps: list[ExportStep] = []
     seen_sessions: set[str] = set()
+    session_lines: list[int] = []
     number = 0
 
     for number, text in enumerate(lines, start=1):
@@ -255,17 +256,9 @@ def parse_document(
             session = cast(ExportSession, row)
             if session["id"] in seen_sessions:
                 raise bad(f"session {session['id']} appears twice")
-            parent = session["parent_session_id"]
-            if parent is not None and parent not in seen_sessions:
-                # A fork whose parent is not yet defined cannot be created in
-                # one pass, and if the parent is absent entirely the trace is
-                # not independently usable - it cannot be diffed or walked.
-                raise bad(
-                    f"session {session['id']} names parent {parent}, which has not "
-                    "been defined yet; ancestors must come first"
-                )
             seen_sessions.add(session["id"])
             sessions.append(session)
+            session_lines.append(number)
             continue
 
         step = cast(ExportStep, row)
@@ -294,6 +287,23 @@ def parse_document(
             "file is empty" if number == 0 else "file has no header row",
             path=path,
         )
+
+    # Deferred, because "the parent comes first" and "the parent is here at
+    # all" are different questions and only the first belongs to the format.
+    # A file exported with --no-ancestors names parents it does not contain,
+    # and that is legal here: whether the store already has them is what
+    # `import` decides. Refusing it at parse time would make our own exporter
+    # produce files we cannot read.
+    position = {s["id"]: i for i, s in enumerate(sessions)}
+    for index, session in enumerate(sessions):
+        parent = session["parent_session_id"]
+        if parent is not None and position.get(parent, -1) > index:
+            raise ExportFormatError(
+                f"session {session['id']} names parent {parent}, which is defined "
+                "later in the file; ancestors must come first",
+                line=session_lines[index],
+                path=path,
+            )
     return header, sessions, steps
 
 
