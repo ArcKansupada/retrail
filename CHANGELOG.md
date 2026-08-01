@@ -8,6 +8,14 @@ plus the CLI. The dict shapes those functions return are now declared in
 `retrial/types.py`; before 1.0 they may **gain** keys in a minor release, but an
 existing key will not silently change meaning.
 
+## [Unreleased]
+
+### Added
+- **Every CLI command's `--help` now carries a usage example.** All 13 commands
+  (`init`, `list`, `log`, `show`, `fork`, `diff`, `bisect`, `ablate`, `sweep`,
+  `rerun`, `cost`, `export`, `import`) show one realistic invocation, so the
+  reference is right where you are when you run `<command> --help`.
+
 ## [0.1.3] - 2026-08-01
 
 ### Changed

@@ -191,7 +191,12 @@ def cli(ctx: click.Context, db: str | None) -> None:
 @cli.command()
 @click.pass_context
 def init(ctx: click.Context) -> None:
-    """Create .retrial/ and the sqlite database in the current directory."""
+    """Create .retrial/ and the sqlite database in the current directory.
+
+    \b
+    Example:
+      retrial init
+    """
     # Deliberately not ctx.obj["db"]: that searches upward, so `init` inside a
     # project that already has a store would reopen the parent's and report
     # success without creating anything here.
@@ -220,7 +225,12 @@ def init(ctx: click.Context) -> None:
 @cli.command(name="list")
 @click.pass_context
 def list_sessions(ctx: click.Context) -> None:
-    """List sessions as a tree."""
+    """List sessions as a tree.
+
+    \b
+    Example:
+      retrial list
+    """
     with _store(ctx) as store:
         sessions = store.list_sessions()
         if not sessions:
@@ -300,7 +310,12 @@ def _edit_summary(edit_json: str | None) -> str | None:
 @click.argument("session_id")
 @click.pass_context
 def log(ctx: click.Context, session_id: str) -> None:
-    """Step-by-step history of a session, one SHA per step."""
+    """Step-by-step history of a session, one SHA per step.
+
+    \b
+    Example:
+      retrial log s_a8d4f64945
+    """
     with _store(ctx) as store:
         session = store.get_session(session_id)
         steps = store.steps_for(session_id)
@@ -362,7 +377,12 @@ def _summarize(step: Step | TrajectoryEntry) -> str:
 @click.argument("sha")
 @click.pass_context
 def show(ctx: click.Context, sha: str) -> None:
-    """Full detail on one step, by SHA (prefix ok)."""
+    """Full detail on one step, by SHA (prefix ok).
+
+    \b
+    Example:
+      retrial show 4f0c1e2
+    """
     with _store(ctx) as store:
         step = store.get_step(sha)
         echo(f"sha        {step['sha']}")
@@ -408,8 +428,10 @@ def export(
     never travel: exporting a root does not hand over the experiments run on
     top of it.
 
-        retrial export s_ab12cd34ef > trace.jsonl
-        retrial export --all -o backup.jsonl
+    \b
+    Examples:
+      retrial export s_ab12cd34ef > trace.jsonl
+      retrial export --all -o backup.jsonl
     """
     if everything and session_ids:
         raise click.UsageError("give session ids or --all, not both.")
@@ -444,8 +466,10 @@ def import_cmd(ctx: click.Context, source: str) -> None:
     is refused rather than trusted. Sessions already here with identical
     content are skipped, which makes re-importing the same file a no-op.
 
-        retrial import trace.jsonl
-        cat trace.jsonl | retrial import -
+    \b
+    Examples:
+      retrial import trace.jsonl
+      cat trace.jsonl | retrial import -
     """
     with _store(ctx) as store:
         result = import_document(store, read_data(source), path=None if source == "-" else source)
@@ -499,7 +523,12 @@ def fork(
     edit_file: str | None,
     name: str | None,
 ) -> None:
-    """Fork from a step SHA and re-execute the agent for real."""
+    """Fork from a step SHA and re-execute the agent for real.
+
+    \b
+    Example:
+      retrial fork a1b2c3d --agent myapp:agent --edit-file edit.json
+    """
     edit = None
     if edit_file:
         with open(edit_file) as fh:
@@ -520,7 +549,12 @@ def fork(
 @click.option("--full", is_flag=True, help="Show every shared step, not a summary.")
 @click.pass_context
 def diff(ctx: click.Context, session_a: str, session_b: str, full: bool) -> None:
-    """Compare two trajectories and show where they diverged."""
+    """Compare two trajectories and show where they diverged.
+
+    \b
+    Example:
+      retrial diff s_a8d4f64945 s_3f9c02ab1e
+    """
     with _store(ctx) as store:
         result = diff_sessions(store, session_a, session_b)
         _render_diff(result, full)
@@ -646,6 +680,10 @@ def bisect(
 
     Each probe forks the run and re-executes for real, so this costs real model
     calls - roughly log2(steps) of them, times --samples.
+
+    \b
+    Example:
+      retrial bisect s_cc6b0dc420 --agent myapp:agent --check "output contains 'confirmed'"
     """
     target = _load_agent(agent)
     with _store(ctx) as store:
@@ -712,6 +750,10 @@ def ablate(ctx: click.Context, session_id: str, check: str, agent: str) -> None:
 
     Perturbs each tool result in turn, re-executes for real, and reports
     whether the check flipped. Costs one re-execution per tool_call step.
+
+    \b
+    Example:
+      retrial ablate s_a8d4f64945 --agent myapp:agent --check "output contains 'QX7R2M'"
     """
     target = _load_agent(agent)
     with _store(ctx) as store:
@@ -790,6 +832,10 @@ def sweep(
     """Substitute N values at one step and compare the outcomes.
 
     Costs one real re-execution per value.
+
+    \b
+    Example:
+      retrial sweep eec0274 --agent myapp:agent --values-file fares.json
     """
     with open(values_file) as fh:
         values = json.load(fh)
@@ -834,7 +880,12 @@ def _render_sweep(result: SweepResult) -> None:
 @click.argument("session_id")
 @click.pass_context
 def cost(ctx: click.Context, session_id: str) -> None:
-    """Cost and token breakdown per step."""
+    """Cost and token breakdown per step.
+
+    \b
+    Example:
+      retrial cost s_3ca5a1df75
+    """
     with _store(ctx) as store:
         entries = trajectory(store, session_id)
         total, unpriced = trajectory_cost(entries)
@@ -888,6 +939,10 @@ def rerun(
     Your recorded runs are the regression suite - nobody writes test cases.
     Edit your prompt or swap your model, then run this: it reports which
     recorded outcomes your change broke.
+
+    \b
+    Example:
+      retrial rerun --agent myapp:agent --check "output contains 'QX7R2M'"
     """
     target = _load_agent(agent)
     with _store(ctx) as store:
