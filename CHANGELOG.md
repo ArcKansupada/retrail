@@ -8,7 +8,11 @@ plus the CLI. The dict shapes those functions return are now declared in
 `retrial/types.py`; before 1.0 they may **gain** keys in a minor release, but an
 existing key will not silently change meaning.
 
-## [Unreleased]
+## [0.1.0] - 2026-07-31
+
+First working version: record, fork, diff, bisect, ablate, sweep, rerun, and
+cost, all backed by real re-execution against a live model. Validated against
+`claude-opus-4-8`.
 
 ### Added
 - **`retrial export` / `retrial import`**, and `export` / `import_` in the
@@ -31,7 +35,7 @@ existing key will not silently change meaning.
 - **Schema versioning.** The database now records which schema wrote it
   (`PRAGMA user_version`), and a file written by a newer retrial is refused at
   open time with a `SchemaVersionError` naming both versions, instead of being
-  opened and misbehaving later. Databases recorded by 0.1.0 carry no stamp; that
+  opened and misbehaving later. Databases from earlier builds carry no stamp; that
   layout *is* v1, so they are adopted and labelled rather than rejected. There is
   a `_migrate` hook for the next bump.
 - **Type hints throughout, and a `py.typed` marker.** The package is fully
@@ -95,9 +99,3 @@ existing key will not silently change meaning.
   the same way — an agent launched from a subdirectory wrote somewhere the CLI
   would never look — and the two halves could disagree without either ever
   raising.
-
-## [0.1.0]
-
-First working version: record, fork, diff, bisect, ablate, sweep, rerun, and
-cost, all backed by real re-execution against a live model. Validated against
-`claude-opus-4-8`.
