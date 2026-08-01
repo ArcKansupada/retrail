@@ -8,6 +8,21 @@ plus the CLI. The dict shapes those functions return are now declared in
 `retrial/types.py`; before 1.0 they may **gain** keys in a minor release, but an
 existing key will not silently change meaning.
 
+## [0.1.3] - 2026-08-01
+
+### Changed
+- **README rewritten and pointed at PyPI.** `pip install retrial` now that the
+  package is published (was `pip install -e .`). Cut to a focused overview - one
+  worked fork/diff example, the other commands a line each. Removed all in-page
+  hyperlinks; relative ones never resolved on PyPI anyway.
+
+### Fixed
+- **Dollar amounts no longer render as inline math.** They now appear only in
+  code blocks, never in prose. PyPI renders Markdown through comrak, which reads
+  `$...$` as math and - unlike GitHub - decodes an `&#36;` entity before
+  scanning, so neither the 0.1.1 backslash escape nor the 0.1.2 entity fixed it
+  there. Keeping the amounts out of prose does, on every renderer.
+
 ## [0.1.2] - 2026-08-01
 
 ### Fixed
@@ -15,9 +30,8 @@ existing key will not silently change meaning.
   but not PyPI: PyPI now renders Markdown through comrak, which reads `$...$` as
   inline math and does not treat a backslash-escaped `\$` as a way out - so a
   sentence like "a &#36;450 ... &#36;1,450 fare" still collapsed into a math span there.
-  Replaced the escapes with the HTML entity `&#36;`, which renders as a literal
-  `$` but puts no `$` character in the source at all, so no renderer can read it
-  as a math delimiter. Documentation only; no code change.
+  Replaced the escapes with the HTML entity `&#36;`. This fixed GitHub but not
+  PyPI - see 0.1.3. Documentation only; no code change.
 
 ## [0.1.1] - 2026-08-01
 
