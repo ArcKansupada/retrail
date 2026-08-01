@@ -19,9 +19,9 @@ retrial bisect s_cc6b0dc420 --check "output contains 'confirmed'" --agent myapp.
 
 ## Status
 
-Early but complete end to end: record, fork, diff, and bisect all work, and all four are **validated against `claude-opus-4-8`**, not just a stand-in. Forking a real $450 booking with a $1,450 fare spliced in makes Opus decline to book, explain the budget breach, and never call `book_flight` — a path the original never took. See [the design doc](retrial-design-doc.md).
+Early but complete end to end: record, fork, diff, and bisect all work, and all four are **validated against `claude-opus-4-8`**, not just a stand-in. Forking a real \$450 booking with a \$1,450 fare spliced in makes Opus decline to book, explain the budget breach, and never call `book_flight` — a path the original never took. See [the design doc](https://github.com/ArcKansupada/retrial/blob/main/retrial-design-doc.md).
 
-**Fastest way in:** the [60-second tour](examples/README.md) — a toy booking agent you can fork, diff, and bisect with **no API key**.
+**Fastest way in:** the [60-second tour](https://github.com/ArcKansupada/retrial/blob/main/examples/README.md) — a toy booking agent you can fork, diff, and bisect with **no API key**.
 
 ```bash
 pytest              # 335 offline tests, deterministic and free
@@ -76,7 +76,7 @@ session s_a8d4f64945  (booking-agent)
             3 messages in -> end_turn [text]
 ```
 
-What if that flight had cost $1200 instead of $450?
+What if that flight had cost \$1200 instead of \$450?
 
 ```bash
 $ cat edit.json
@@ -245,7 +245,7 @@ This is the part that matters, and there's no option that's both cheap and unive
 | `--at-tool NAME` | the steps after NAME | exactly the decision that follows that fact |
 | `--from last` | ~1 model call | **usually nothing** — see below |
 
-`--from last` is a trap, and it's measured, not theoretical. Against live Opus 4.8 with a budget prompt tightened from $600 to $300:
+`--from last` is a trap, and it's measured, not theoretical. Against live Opus 4.8 with a budget prompt tightened from \$600 to \$300:
 
 ```
 --from last              -> regressions: 0  |  1 call  $0.0106   <- misses it
@@ -275,7 +275,7 @@ An unknown model prices as `unpriced`, never as a guess — and a partial total 
 
 ## What isn't here, deliberately
 
-**Merge was cut, not deferred.** This is where the git metaphor stops paying rent. Git merges because branches are *work that must be combined* — the merged artifact is what ships. retrial's branches are *questions being asked*, and two forks are usually competing hypotheses of which at most one is true. Merging "the fare was $450" with "the fare was $1,450" feeds the model contradictory facts: not a better-informed run, a confused one. Answers don't merge. Full reasoning in [the design doc](retrial-design-doc.md) §6.6.
+**Merge was cut, not deferred.** This is where the git metaphor stops paying rent. Git merges because branches are *work that must be combined* — the merged artifact is what ships. retrial's branches are *questions being asked*, and two forks are usually competing hypotheses of which at most one is true. Merging "the fare was \$450" with "the fare was \$1,450" feeds the model contradictory facts: not a better-informed run, a confused one. Answers don't merge. Full reasoning in [the design doc](https://github.com/ArcKansupada/retrial/blob/main/retrial-design-doc.md) §6.6.
 
 **Blame-by-attribution was cut too** — replaced by `ablate`, which answers the same question causally instead of heuristically.
 
@@ -364,7 +364,7 @@ result["divergance"]   # error: TypedDict "DiffResult" has no key "divergance"
 
 ## Try it without an API key
 
-The bundled example ships a scripted model, so you can fork, diff, and bisect with no spend. See the **[60-second tour](examples/README.md)**:
+The bundled example ships a scripted model, so you can fork, diff, and bisect with no spend. See the **[60-second tour](https://github.com/ArcKansupada/retrial/blob/main/examples/README.md)**:
 
 ```bash
 retrial init
