@@ -8,6 +8,17 @@ plus the CLI. The dict shapes those functions return are now declared in
 `retrial/types.py`; before 1.0 they may **gain** keys in a minor release, but an
 existing key will not silently change meaning.
 
+## [0.1.2] - 2026-08-01
+
+### Fixed
+- **README dollar amounts, take two.** The `\$` escape in 0.1.1 fixed GitHub
+  but not PyPI: PyPI now renders Markdown through comrak, which reads `$...$` as
+  inline math and does not treat a backslash-escaped `\$` as a way out - so a
+  sentence like "a &#36;450 ... &#36;1,450 fare" still collapsed into a math span there.
+  Replaced the escapes with the HTML entity `&#36;`, which renders as a literal
+  `$` but puts no `$` character in the source at all, so no renderer can read it
+  as a math delimiter. Documentation only; no code change.
+
 ## [0.1.1] - 2026-08-01
 
 ### Fixed
@@ -15,7 +26,7 @@ existing key will not silently change meaning.
   Relative links (`retrial-design-doc.md`, `examples/README.md`) 404'd on PyPI,
   which does not rewrite relative paths to the repo the way GitHub does - made
   them absolute. And prose dollar amounts formed accidental inline-math spans:
-  two dollar signs in a sentence ("a \$450 ... \$1,450 fare") are read as math
+  two dollar signs in a sentence ("a &#36;450 ... &#36;1,450 fare") are read as math
   delimiters, lifting the text between them out of the prose in an italic math
   font. Escaped the prose dollar signs (`\$`), which render as a literal `$` and
   cannot open a math span; dollar signs inside code fences are untouched.
