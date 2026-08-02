@@ -141,36 +141,34 @@ def test_the_default_store_is_created_exactly_once(tmp_path, monkeypatch):
 def test_pending_context_does_not_leak_between_threads(store):
     """`_pending` is how fork tells the decorator which session to record into.
 
-    As a module-level dict, two concurrent forks meant the second overwrote the
-    first and one agent's steps were recorded under the other's session - a
-    trace that reads as valid and describes a run that never happened.
+    As a module-level dict (or a threading.local) two concurrent forks could
+    clobber each other and one agent's steps landed under the other's session -
+    a trace that reads as valid and describes a run that never happened. As a
+    ContextVar each thread has its own context, so a value set on one is
+    invisible to the others.
     """
     record_module = importlib.import_module("retrial.record")
     sessions = [store.create_session(name=f"fork-{i}") for i in range(THREADS)]
 
     def claim(i):
-        record_module._pending["session"] = {
-            "store": store,
-            "session_id": sessions[i],
-        }
+        record_module._pending.set({"store": store, "session_id": sessions[i]})
         # Yield, so every thread has published before any thread consumes.
         threading.Event().wait(0.01)
-        return record_module._pending.pop("session")["session_id"]
+        ctx = record_module._pending.get()
+        return ctx["session_id"]
 
     assert gather(claim) == sessions
 
 
 def test_pending_set_on_one_thread_is_invisible_to_another(store):
     record_module = importlib.import_module("retrial.record")
-    record_module._pending["session"] = {"store": store, "session_id": "s_main"}
+    token = record_module._pending.set({"store": store, "session_id": "s_main"})
     try:
         with ThreadPoolExecutor(1) as pool:
-            seen = pool.submit(
-                lambda: record_module._pending.pop("session", "nothing")
-            ).result()
-        assert seen == "nothing"
+            seen = pool.submit(record_module._pending.get).result()
+        assert seen is None
     finally:
-        record_module._pending.pop("session", None)
+        record_module._pending.reset(token)
 
 
 # -- end to end ----------------------------------------------------------------

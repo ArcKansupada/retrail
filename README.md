@@ -34,7 +34,7 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
         messages.append({"role": "user", "content": execute_tools(response)})
 ```
 
-**The one rule: `messages` must be a parameter**, not a list created inside the function. That's what lets a fork seed your loop with edited history and get genuine re-execution. Give the other parameters defaults to fork from the CLI. The loop must be synchronous — `@record` refuses an `async def` rather than record something untrue. Then just run it; steps log as the loop runs, with no export step.
+**The one rule: `messages` must be a parameter**, not a list created inside the function. That's what lets a fork seed your loop with edited history and get genuine re-execution. Give the other parameters defaults to fork from the CLI. Then just run it; steps log as the loop runs, with no export step. Async agents are recorded too — decorate the `async def` and `await` it as usual (re-executing an async agent from `fork`/`bisect`/etc. isn't wired up yet, so those still want a synchronous loop).
 
 A bundled example under `examples/` forks, diffs, and bisects with no API key.
 
@@ -90,7 +90,7 @@ The whole product rests on the replay being exactly what happened, so retrial ra
 - Your loop **transforms a tool result** before appending it — the patch would land on a value you never saw.
 - An edit **invents or drops** a tool result the run never produced.
 - A run **crashed mid-loop** — the message state after its trailing tool call was never observed.
-- Your agent or its model call is **async** — the session would be marked complete before the loop ran a step.
+- A **sync** agent is handed an **async** `call_model` or `execute_tools` — a sync loop can't await it, so retrial would record an un-awaited coroutine. (Async *agents* are fine; this is only the mismatch.)
 - The database was written by a **newer retrial**, or an imported step's **content doesn't match its SHA**.
 
 A wrong replay would be worse than no replay. Merge was cut for the same reason: two forks are competing hypotheses, and answers don't merge.

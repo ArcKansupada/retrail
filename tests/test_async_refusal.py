@@ -1,14 +1,11 @@
-"""Async agents are refused, because recording one would lie.
+"""A synchronous agent still refuses an async interception point.
 
-A sync wrapper cannot record an `async def`. Calling it only builds a
-coroutine: the body has not run, so the session is stamped `complete` with zero
-steps, and the `except BaseException` that marks a crashed run `failed` never
-sees the failure - it happens later, inside the event loop. The result is a run
-that raised partway through, stored as a successful one.
-
-Worse than a crash: every other retrial failure is loud, but this one leaves a
-trace that quietly disagrees with what happened. So it is refused at decoration
-time, before any of it can occur.
+Async *agents* are recorded now - see test_async_recorder.py. But a *sync*
+agent handed an async `call_model` or `execute_tools` is still refused: a sync
+loop never awaits, so what would get recorded is an un-awaited coroutine, not
+the model's response, and the session would be stamped over work that never
+ran. That is the old silent-corruption shape, so it is named at the call
+boundary rather than left to surface from the serializer.
 """
 
 import asyncio
@@ -18,29 +15,6 @@ from conftest import TOOLS, fake_model, make_executor, raw_agent
 
 from retrial import record
 from retrial.errors import IntegrationError
-
-
-def test_decorating_an_async_agent_is_refused(store):
-    with pytest.raises(IntegrationError) as excinfo:
-
-        @record(session_name="async-agent", store=store)
-        async def agent(messages, tools, call_model, execute_tools):
-            return None
-
-    assert "async" in str(excinfo.value)
-    # Point at the fix, not just the problem.
-    assert "asyncio.run" in str(excinfo.value)
-
-
-def test_the_refusal_happens_before_a_session_exists(store):
-    """Decoration-time, so an import fails - not a run that half-recorded."""
-    with pytest.raises(IntegrationError):
-
-        @record(session_name="async-agent", store=store)
-        async def agent(messages, tools, call_model, execute_tools):
-            return None
-
-    assert store.list_sessions() == []
 
 
 def test_an_async_call_model_is_refused(store, opening):

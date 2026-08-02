@@ -1,0 +1,181 @@
+"""Recording an async agent, for real.
+
+`@record` used to refuse `async def` agents. Now it wraps them: the async
+wrapper *awaits* the body, so `complete`/`failed` land after the loop actually
+runs (never on an empty session), and the interception points await the real
+call so the response is recorded, not an un-awaited coroutine.
+
+The load-bearing test is the last one. fork() hands the target session to the
+decorator through a ContextVar; async concurrency is many coroutines on one
+thread, so two forks under `asyncio.gather` must not clobber each other's
+handoff and cross-record one agent's steps into the other's session. That is
+the exact bug a `threading.local` would reintroduce, and the ContextVar is why
+it can't.
+"""
+
+import asyncio
+import importlib
+
+import pytest
+from conftest import TOOLS, fake_model, make_executor
+
+from retrial import record
+
+COUNT = 6
+
+
+# -- async stand-ins for the conftest sync fixtures ---------------------------
+
+
+async def async_model(messages, tools=None):
+    return fake_model(messages, tools)
+
+
+def make_async_executor(flight_price):
+    sync = make_executor(flight_price)
+
+    async def execute_tools(response):
+        return sync(response)
+
+    return execute_tools
+
+
+async def async_agent(messages, tools, call_model, execute_tools):
+    """Awaits both interception points - the async-through-and-through shape."""
+    while True:
+        response = await call_model(messages, tools)
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
+            return response
+        messages.append({"role": "user", "content": await execute_tools(response)})
+
+
+async def async_agent_sync_hooks(messages, tools, call_model, execute_tools):
+    """Async agent, synchronous hooks - the hooks are called, not awaited."""
+    while True:
+        response = call_model(messages, tools)
+        messages.append({"role": "assistant", "content": response.content})
+        if response.stop_reason != "tool_use":
+            return response
+        messages.append({"role": "user", "content": execute_tools(response)})
+
+
+def make_exploding_model():
+    """Succeeds once, then raises - so a crash happens with steps already recorded."""
+    state = {"n": 0}
+
+    async def model(messages, tools=None):
+        state["n"] += 1
+        if state["n"] >= 2:
+            raise RuntimeError("model exploded")
+        return fake_model(messages, tools)
+
+    return model
+
+
+# -- the async path records, and completes after the body runs ----------------
+
+
+def test_calling_an_async_agent_returns_a_coroutine(store, opening):
+    """The complement of the sync guarantee: an async agent stays awaitable."""
+    agent = record(store=store)(async_agent)
+    coro = agent(list(opening), TOOLS, async_model, make_async_executor(450))
+    assert asyncio.iscoroutine(coro)
+    asyncio.run(coro)  # drive it, so there is no un-awaited coroutine warning
+
+
+def test_an_async_agent_records_its_steps_and_completes(store, opening):
+    agent = record(store=store)(async_agent)
+    result = asyncio.run(
+        agent(list(opening), TOOLS, async_model, make_async_executor(450))
+    )
+
+    assert result.stop_reason == "end_turn"
+    sessions = store.list_sessions()
+    assert len(sessions) == 1
+    # complete AND non-empty: the old bug stamped complete over zero steps.
+    assert sessions[0]["status"] == "complete"
+    steps = store.steps_for(sessions[0]["id"])
+    assert [s["step_type"] for s in steps] == ["model_call", "tool_call", "model_call"]
+
+
+def test_an_async_call_model_is_awaited_not_recorded_as_a_coroutine(store, opening):
+    """If the call weren't awaited, the recorded output would be a coroutine and
+    the serializer would choke; a real response here proves it was awaited."""
+    agent = record(store=store)(async_agent)
+    asyncio.run(agent(list(opening), TOOLS, async_model, make_async_executor(450)))
+
+    first = store.steps_for(store.list_sessions()[0]["id"])[0]
+    assert first["output"]["stop_reason"] == "tool_use"
+    assert first["output"]["content"]  # the model's real content, not a coroutine
+
+
+def test_an_async_agent_that_raises_partway_is_failed_with_steps_kept(store, opening):
+    agent = record(store=store)(async_agent)
+    with pytest.raises(RuntimeError, match="model exploded"):
+        asyncio.run(
+            agent(list(opening), TOOLS, make_exploding_model(), make_async_executor(450))
+        )
+
+    session = store.list_sessions()[0]
+    assert session["status"] == "failed"
+    assert store.steps_for(session["id"]), "steps before the crash were dropped"
+
+
+def test_an_async_agent_with_sync_hooks_records(store, opening):
+    """Mixed shape: async loop, synchronous call_model/execute_tools."""
+    agent = record(store=store)(async_agent_sync_hooks)
+    asyncio.run(agent(list(opening), TOOLS, fake_model, make_executor(450)))
+
+    session = store.list_sessions()[0]
+    assert session["status"] == "complete"
+    assert store.steps_for(session["id"])
+
+
+def test_fork_refuses_an_async_agent_for_now(store, opening):
+    """Phase 1 records async agents but does not re-execute them. Forking one
+    must refuse loudly - calling it un-awaited would record nothing, silently."""
+    from retrial import fork
+    from retrial.errors import IntegrationError
+
+    agent = record(store=store)(async_agent)
+    asyncio.run(agent(list(opening), TOOLS, async_model, make_async_executor(450)))
+    sha = store.steps_for(store.list_sessions()[0]["id"])[0]["sha"]
+
+    with pytest.raises(IntegrationError, match="async"):
+        fork(from_sha=sha, agent=agent, store=store)
+
+
+# -- the load-bearing one: concurrent forks keep separate sessions ------------
+
+
+def test_concurrent_async_forks_do_not_cross_sessions(store, opening):
+    """The ContextVar proof. Each task sets the fork handoff and awaits the
+    agent; a threading.local would let the last setter win and record every
+    run into one session. With a ContextVar each task has its own copy, so each
+    of the COUNT sessions gets exactly its own run's steps."""
+    record_module = importlib.import_module("retrial.record")
+    agent = record(store=store)(async_agent)
+    sessions = [store.create_session(name=f"fork-{i}") for i in range(COUNT)]
+
+    async def run_all():
+        async def one(i):
+            record_module._pending.set(
+                {"store": store, "session_id": sessions[i]}
+            )
+            # Yield so every task publishes its handoff before any consumes it -
+            # the interleaving that makes a shared-state bug certain.
+            await asyncio.sleep(0)
+            await agent(list(opening), TOOLS, async_model, make_async_executor(450))
+
+        await asyncio.gather(*(one(i) for i in range(COUNT)))
+
+    asyncio.run(run_all())
+
+    for session_id in sessions:
+        steps = store.steps_for(session_id)
+        numbers = [s["step_number"] for s in steps]
+        # A leak shows up as one session with 6 steps and another with 0, or as
+        # non-contiguous numbering where two runs interleaved into one session.
+        assert numbers == list(range(len(numbers))), "steps crossed between sessions"
+        assert len(steps) == 3, f"{session_id} got {len(steps)} steps, not its own 3"

@@ -10,13 +10,14 @@ credibility rests on "the replay is exactly what happened".
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import functools
 import inspect
 import threading
 import time
 from collections.abc import Callable
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar, cast
 
 from .errors import IntegrationError
 from .pricing import cost_of
@@ -44,32 +45,20 @@ def _is_async(obj: object) -> bool:
     # `callable()` answers a different question and would miss this entirely.
     return inspect.iscoroutinefunction(type(obj).__call__)
 
-class _Pending(threading.local):
-    """Handoff from fork() to the decorator, per thread.
-
-    Dict-shaped because that is how fork() uses it, but thread-local because
-    the value is a *destination*: it says which session the very next recorded
-    run belongs to. A plain module dict makes that a race with a silent wrong
-    answer - two concurrent forks, and the second overwrites the first, so one
-    agent's steps are recorded into the other fork's session. Wrong provenance
-    is worse than a crash here: the trace looks fine and describes a run that
-    never happened. `threading.local` makes it structurally impossible, since
-    fork() sets it and the agent it calls consumes it on the same thread.
-    """
-
-    def __init__(self) -> None:
-        self._values: dict[str, Any] = {}
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self._values[key] = value
-
-    def pop(self, key: str, default: Any = None) -> Any:
-        return self._values.pop(key, default)
-
-
-# Set by fork() so a re-executed run records into the fork's session (with its
-# parent provenance) instead of minting a fresh root session.
-_pending = _Pending()
+# Handoff from fork() to the decorator: it names the session the very next
+# recorded run belongs to, so a re-executed run records into the fork's session
+# (with its parent provenance) instead of minting a fresh root.
+#
+# A ContextVar, not a threading.local, because it has to stay correct under both
+# concurrency models. asyncio copies the context per Task, so concurrent forks
+# under asyncio.gather each see their own handoff; threads start from the default
+# context and never share one. A plain module dict - or a threading.local - lets
+# two concurrent async forks on one thread clobber each other, recording one
+# agent's steps into the other's session: a trace that looks fine and describes a
+# run that never happened. Wrong provenance is worse than a crash.
+_pending: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "retrial_pending", default=None
+)
 
 # One Store per database per process, shared across threads - Store itself is
 # thread-safe. Without this, every recorded run opens a new sqlite connection
@@ -126,28 +115,6 @@ def record(
     """
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
-        # Refuse async at decoration time, so the error arrives when the module
-        # is imported rather than after a run that appeared to work.
-        #
-        # A sync wrapper around an `async def` does not record it - calling the
-        # function only builds a coroutine, so `fn(...)` returns before the body
-        # has executed a single step. The session is stamped `complete`
-        # immediately, and the `except BaseException` that marks a crashed run
-        # `failed` never sees anything, because the body runs later inside the
-        # event loop. A run that raised partway through is stored as a
-        # successful one. That is the worst failure this project can have: not a
-        # crash, but a recording that quietly disagrees with what happened.
-        if _is_async(fn):
-            raise IntegrationError(
-                f"@record cannot record {getattr(fn, '__name__', fn)!r} because it is "
-                "an async function, and retrial does not support async agents yet. "
-                "Calling an async function returns a coroutine without running its "
-                "body, so retrial would mark the session complete before your loop "
-                "had taken a step - and a run that later failed would be recorded as "
-                "a successful one. Wrap the loop in a synchronous function (for "
-                "example, one that calls asyncio.run) and decorate that instead."
-            )
-
         signature = inspect.signature(fn)
         for name in (messages_arg, model_arg, tools_arg):
             if name not in signature.parameters:
@@ -158,46 +125,51 @@ def record(
                     "(or set the *_arg options on @record)."
                 )
 
-        @functools.wraps(fn)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        agent_is_async = _is_async(fn)
+
+        def setup(
+            args: tuple[Any, ...], kwargs: dict[str, Any]
+        ) -> tuple[inspect.BoundArguments, Store, str]:
             bound = signature.bind(*args, **kwargs)
             bound.apply_defaults()
 
             # Validate BEFORE touching the store. Both interception points are
             # wrapped here, before the body runs, so a lazily-constructed
-            # callable cannot work: retrial wraps whatever the argument is at
-            # call time, and a `None` sentinel meant to be replaced inside the
-            # body gets wrapped instead, failing as "'NoneType' object is not
-            # callable" several frames deep. Say so at the boundary - and say
-            # it before a session row exists, or a rejected call would strand
-            # an empty session in the store.
+            # callable cannot work: a `None` sentinel meant to be replaced inside
+            # the body gets wrapped instead, failing as "'NoneType' is not
+            # callable" several frames deep. Say so at the boundary - and before
+            # a session row exists, or a rejected call strands an empty session.
             for name in (model_arg, tools_arg):
-                if not callable(bound.arguments[name]):
+                value = bound.arguments[name]
+                if not callable(value):
                     raise IntegrationError(
-                        f"{fn.__name__}() got {name}={bound.arguments[name]!r}, which "
-                        f"is not callable. @record wraps {name} before your function "
-                        "body runs, so it must already be a callable when the agent "
-                        "is invoked - it cannot be built lazily inside the body. "
-                        "Give it a real function as its default and do any lazy "
-                        "setup (client construction, auth) on first call inside "
-                        "that function."
+                        f"{fn.__name__}() got {name}={value!r}, which is not "
+                        f"callable. @record wraps {name} before your function body "
+                        "runs, so it must already be a callable when the agent is "
+                        "invoked - it cannot be built lazily inside the body. Give "
+                        "it a real function as its default and do any lazy setup "
+                        "(client construction, auth) on first call inside it."
                     )
-                # An async call_model or execute_tools inside a sync agent fails
-                # too, just further away: the wrapper never awaits it, so what
-                # gets recorded is a coroutine object, and the complaint arrives
-                # from the serializer as "cannot serialize coroutine" - true, but
-                # silent about the actual cause. Name it here instead.
-                if _is_async(bound.arguments[name]):
+                # A sync agent cannot await an async interception point: the loop
+                # never awaits it, so what gets recorded is an un-awaited
+                # coroutine, not the response. (An async agent handles an async
+                # call_model fine - that path awaits it.) Name it here rather than
+                # let it surface from the serializer as "cannot serialize
+                # coroutine", which is true but silent about the cause.
+                if not agent_is_async and _is_async(value):
                     raise IntegrationError(
-                        f"{fn.__name__}() got an async {name}, which retrial cannot "
-                        "record yet. retrial calls it and records what comes back; "
-                        "for a coroutine function that is an un-awaited coroutine, "
-                        "not the model's response. Give retrial a synchronous "
-                        f"{name} (for example one that calls asyncio.run internally) "
-                        "so there is a real response to record."
+                        f"{fn.__name__}() is a synchronous agent but got an async "
+                        f"{name}. A sync loop cannot await it, so retrial would "
+                        "record an un-awaited coroutine instead of the response. "
+                        "Make the agent async (retrial records async agents now), "
+                        f"or pass a synchronous {name} (for example one that calls "
+                        "asyncio.run internally)."
                     )
 
-            ctx = _pending.pop("session", None)
+            # Consume the fork handoff exactly once, so a nested or later run in
+            # the same context does not re-inherit it.
+            ctx = _pending.get()
+            _pending.set(None)
             active_store = ctx["store"] if ctx else (store or _default_store())
             session_id = (
                 ctx["session_id"]
@@ -208,22 +180,43 @@ def record(
             recorder = _Recorder(active_store, session_id)
             bound.arguments[model_arg] = recorder.wrap_model(bound.arguments[model_arg])
             bound.arguments[tools_arg] = recorder.wrap_tools(bound.arguments[tools_arg])
+            return bound, active_store, session_id
 
-            wrapper.last_session_id = session_id  # type: ignore[attr-defined]
-            try:
-                result = fn(*bound.args, **bound.kwargs)
-            except BaseException:
-                # A crashed run is the one you most want to inspect, so keep
-                # every step recorded so far and mark why it stopped.
-                active_store.set_status(session_id, "failed")
-                raise
+        if agent_is_async:
 
-            active_store.set_status(session_id, "complete")
-            return result
+            @functools.wraps(fn)
+            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
+                bound, active_store, session_id = setup(args, kwargs)
+                wrapper.last_session_id = session_id  # type: ignore[attr-defined]
+                try:
+                    # fn is an async def here (agent_is_async), so its result is
+                    # awaitable; the TypeVar R cannot express that to the checker.
+                    result = await fn(*bound.args, **bound.kwargs)  # type: ignore[misc]
+                except BaseException:
+                    active_store.set_status(session_id, "failed")
+                    raise
+                active_store.set_status(session_id, "complete")
+                return result
+
+        else:
+
+            @functools.wraps(fn)
+            def wrapper(*args: P.args, **kwargs: P.kwargs) -> Any:
+                bound, active_store, session_id = setup(args, kwargs)
+                wrapper.last_session_id = session_id  # type: ignore[attr-defined]
+                try:
+                    result = fn(*bound.args, **bound.kwargs)
+                except BaseException:
+                    # A crashed run is the one you most want to inspect, so keep
+                    # every step recorded so far and mark why it stopped.
+                    active_store.set_status(session_id, "failed")
+                    raise
+                active_store.set_status(session_id, "complete")
+                return result
 
         wrapper.last_session_id = None  # type: ignore[attr-defined]
         wrapper.__retrial_agent__ = True  # type: ignore[attr-defined]
-        return wrapper
+        return cast("Callable[P, R]", wrapper)
 
     return decorator
 
@@ -237,52 +230,80 @@ class _Recorder:
         # lock, rather than read here and passed in - see Store.add_step.
 
     def wrap_model(self, call_model: Callable[..., Any]) -> Callable[..., Any]:
+        # Snapshot the history VERBATIM, exactly as the user's loop built it,
+        # before the model sees it. This snapshot is what a fork later replays -
+        # we never reconstruct history from parts, because guessing how the loop
+        # assembles messages would make the replay an imitation, not a recording.
+        if _is_async(call_model):
+
+            @functools.wraps(call_model)
+            async def wrapped_async(messages: Any, *args: Any, **kwargs: Any) -> Any:
+                snapshot = to_jsonable(copy.deepcopy(list(messages)))
+                started = time.perf_counter()
+                response = await call_model(messages, *args, **kwargs)
+                self._record_model_call(snapshot, started, response, args)
+                return response
+
+            return wrapped_async
+
         @functools.wraps(call_model)
         def wrapped(messages: Any, *args: Any, **kwargs: Any) -> Any:
-            # Snapshot the history VERBATIM, exactly as the user's loop built
-            # it, before the model sees it. This snapshot is what a fork later
-            # replays - we never reconstruct history from parts, because
-            # guessing how the loop assembles messages would make the replay an
-            # imitation rather than a recording.
             snapshot = to_jsonable(copy.deepcopy(list(messages)))
             started = time.perf_counter()
             response = call_model(messages, *args, **kwargs)
-            elapsed_ms = (time.perf_counter() - started) * 1000
-
-            serialized = to_jsonable(response)
-            tokens, cost = _usage(serialized)
-            self.store.add_step(
-                self.session_id,
-                None,
-                "model_call",
-                {"messages": snapshot, "extra": to_jsonable(list(args))},
-                serialized,
-                tokens_used=tokens,
-                cost_usd=cost,
-                duration_ms=elapsed_ms,
-            )
+            self._record_model_call(snapshot, started, response, args)
             return response
 
         return wrapped
 
+    def _record_model_call(
+        self, snapshot: JSON, started: float, response: Any, args: tuple[Any, ...]
+    ) -> None:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        serialized = to_jsonable(response)
+        tokens, cost = _usage(serialized)
+        self.store.add_step(
+            self.session_id,
+            None,
+            "model_call",
+            {"messages": snapshot, "extra": to_jsonable(list(args))},
+            serialized,
+            tokens_used=tokens,
+            cost_usd=cost,
+            duration_ms=elapsed_ms,
+        )
+
     def wrap_tools(self, execute_tools: Callable[..., Any]) -> Callable[..., Any]:
+        if _is_async(execute_tools):
+
+            @functools.wraps(execute_tools)
+            async def wrapped_async(response: Any, *args: Any, **kwargs: Any) -> Any:
+                started = time.perf_counter()
+                results = await execute_tools(response, *args, **kwargs)
+                self._record_tool_call(started, response, results)
+                return results
+
+            return wrapped_async
+
         @functools.wraps(execute_tools)
         def wrapped(response: Any, *args: Any, **kwargs: Any) -> Any:
             started = time.perf_counter()
             results = execute_tools(response, *args, **kwargs)
-            elapsed_ms = (time.perf_counter() - started) * 1000
-
-            self.store.add_step(
-                self.session_id,
-                None,
-                "tool_call",
-                _tool_uses(to_jsonable(response)),
-                to_jsonable(results),
-                duration_ms=elapsed_ms,
-            )
+            self._record_tool_call(started, response, results)
             return results
 
         return wrapped
+
+    def _record_tool_call(self, started: float, response: Any, results: Any) -> None:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        self.store.add_step(
+            self.session_id,
+            None,
+            "tool_call",
+            _tool_uses(to_jsonable(response)),
+            to_jsonable(results),
+            duration_ms=elapsed_ms,
+        )
 
 
 def _tool_uses(serialized_response: JSON) -> JSON:

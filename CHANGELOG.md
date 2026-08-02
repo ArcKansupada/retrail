@@ -11,6 +11,17 @@ existing key will not silently change meaning.
 ## [Unreleased]
 
 ### Added
+- **Async agents are recorded, no longer refused.** `@record` now wraps an
+  `async def` agent (and async `call_model` / `execute_tools`): the wrapper
+  awaits the body, so a session is stamped `complete`/`failed` only after the
+  loop actually runs, and the interception points await the real call so the
+  response is recorded, not an un-awaited coroutine. The fork handoff moved from
+  a `threading.local` to a `contextvars.ContextVar`, which stays correct under
+  both threads and `asyncio.gather` (a thread-local would let concurrent async
+  forks cross-record into each other's sessions). A *sync* agent handed an async
+  interception point is still refused. Re-execution of an async agent (`fork`,
+  and the `bisect`/`ablate`/`sweep`/`rerun` built on it) is not wired up yet, so
+  it refuses loudly rather than call the agent un-awaited and record nothing.
 - **Every CLI command's `--help` now carries a usage example.** All 13 commands
   (`init`, `list`, `log`, `show`, `fork`, `diff`, `bisect`, `ablate`, `sweep`,
   `rerun`, `cost`, `export`, `import`) show one realistic invocation, so the

@@ -21,7 +21,7 @@ from typing import Any
 
 from .errors import IntegrationError, ReplayIntegrityError
 from .patch import normalize_edit
-from .record import _pending
+from .record import _is_async, _pending
 from .storage import Store
 from .types import JSON, Agent, Edit, Step
 
@@ -56,6 +56,20 @@ def fork(
             "means calling your loop again - there is nothing to run without it."
         )
 
+    # Recording an async agent works (see record.py); re-executing one does not
+    # yet. fork() calls the agent synchronously, so an async agent would return
+    # a coroutine that never runs - a silent no-op that records nothing. Refuse
+    # loudly instead. bisect/ablate/sweep/rerun all route through here, so this
+    # one guard covers them too.
+    if _is_async(agent):
+        raise IntegrationError(
+            "fork() cannot re-execute an async agent yet. Recording async agents "
+            "works, but re-execution - fork, and the bisect/ablate/sweep/rerun that "
+            "build on it - is not wired for async, so it would call the agent "
+            "without awaiting it and record nothing. For now, wrap the loop in a "
+            "synchronous function (one that calls asyncio.run) and fork that."
+        )
+
     owns_store = store is None
     store = store or Store()
     try:
@@ -83,11 +97,11 @@ def fork(
         # The decorator picks this up so the re-executed run records into the
         # fork's session with its parent provenance, instead of minting a fresh
         # root session.
-        _pending["session"] = {"store": store, "session_id": fork_session_id}
+        token = _pending.set({"store": store, "session_id": fork_session_id})
         try:
             agent(seed, *agent_args, **agent_kwargs)
         finally:
-            _pending.pop("session", None)
+            _pending.reset(token)
 
         return fork_session_id
     finally:
