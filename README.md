@@ -34,7 +34,7 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
         messages.append({"role": "user", "content": execute_tools(response)})
 ```
 
-**The one rule: `messages` must be a parameter**, not a list created inside the function. That's what lets a fork seed your loop with edited history and get genuine re-execution. Give the other parameters defaults to fork from the CLI. Then just run it; steps log as the loop runs, with no export step. Async agents are recorded too — decorate the `async def` and `await` it as usual (re-executing an async agent from `fork`/`bisect`/etc. isn't wired up yet, so those still want a synchronous loop).
+**The one rule: `messages` must be a parameter**, not a list created inside the function. That's what lets a fork seed your loop with edited history and get genuine re-execution. Give the other parameters defaults to fork from the CLI. Then just run it; steps log as the loop runs, with no export step. Async agents work too — decorate the `async def` and `await` it as usual; `fork`, `bisect`, `ablate`, `sweep`, and `rerun` re-execute async agents from the CLI or any synchronous caller.
 
 A bundled example under `examples/` forks, diffs, and bisects with no API key.
 

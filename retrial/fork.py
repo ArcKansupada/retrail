@@ -15,6 +15,7 @@ silently-wrong replay would be worse than no replay at all.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from collections.abc import Sequence
 from typing import Any
@@ -24,6 +25,28 @@ from .patch import normalize_edit
 from .record import _is_async, _pending
 from .storage import Store
 from .types import JSON, Agent, Edit, Step
+
+
+def _running_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
+def _run_agent(agent: Agent, *args: Any, **kwargs: Any) -> Any:
+    """Invoke the agent, awaiting it if it is async.
+
+    A sync agent is called straight through. An async agent is driven to
+    completion with asyncio.run, which owns a fresh event loop for the call. The
+    ContextVar handoff fork() set is copied into that loop's task, so the
+    re-executed run still records into the fork's session. Callers already inside
+    a running loop are refused earlier in fork(), because asyncio.run cannot nest.
+    """
+    if _is_async(agent):
+        return asyncio.run(agent(*args, **kwargs))
+    return agent(*args, **kwargs)
 
 
 def fork(
@@ -56,18 +79,17 @@ def fork(
             "means calling your loop again - there is nothing to run without it."
         )
 
-    # Recording an async agent works (see record.py); re-executing one does not
-    # yet. fork() calls the agent synchronously, so an async agent would return
-    # a coroutine that never runs - a silent no-op that records nothing. Refuse
-    # loudly instead. bisect/ablate/sweep/rerun all route through here, so this
-    # one guard covers them too.
-    if _is_async(agent):
+    # An async agent is re-executed via asyncio.run (see _run_agent). That needs
+    # to own the event loop, so it cannot run from inside a running one - refuse
+    # that case clearly, here, before a fork session row is created. Sync callers
+    # (the CLI, ordinary library use) have no running loop and are fine.
+    # bisect/ablate/sweep/rerun all route through fork(), so this covers them.
+    if _is_async(agent) and _running_loop():
         raise IntegrationError(
-            "fork() cannot re-execute an async agent yet. Recording async agents "
-            "works, but re-execution - fork, and the bisect/ablate/sweep/rerun that "
-            "build on it - is not wired for async, so it would call the agent "
-            "without awaiting it and record nothing. For now, wrap the loop in a "
-            "synchronous function (one that calls asyncio.run) and fork that."
+            "fork() cannot drive an async agent from inside a running event loop: "
+            "it re-executes via asyncio.run, which a running loop forbids. Call "
+            "fork from synchronous code (the CLI does), or await a native async "
+            "fork API - which is not shipped yet."
         )
 
     owns_store = store is None
@@ -99,7 +121,7 @@ def fork(
         # root session.
         token = _pending.set({"store": store, "session_id": fork_session_id})
         try:
-            agent(seed, *agent_args, **agent_kwargs)
+            _run_agent(agent, seed, *agent_args, **agent_kwargs)
         finally:
             _pending.reset(token)
 

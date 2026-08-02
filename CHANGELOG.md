@@ -19,9 +19,11 @@ existing key will not silently change meaning.
   a `threading.local` to a `contextvars.ContextVar`, which stays correct under
   both threads and `asyncio.gather` (a thread-local would let concurrent async
   forks cross-record into each other's sessions). A *sync* agent handed an async
-  interception point is still refused. Re-execution of an async agent (`fork`,
-  and the `bisect`/`ablate`/`sweep`/`rerun` built on it) is not wired up yet, so
-  it refuses loudly rather than call the agent un-awaited and record nothing.
+  interception point is still refused. Re-execution drives async agents too:
+  `fork` (and the `bisect`/`ablate`/`sweep`/`rerun` built on it) run them with
+  `asyncio.run` from any synchronous caller, including the CLI. The one refusal
+  left is forking from inside a running event loop, where `asyncio.run` cannot
+  nest - a native async fork API is future work.
 - **Every CLI command's `--help` now carries a usage example.** All 13 commands
   (`init`, `list`, `log`, `show`, `fork`, `diff`, `bisect`, `ablate`, `sweep`,
   `rerun`, `cost`, `export`, `import`) show one realistic invocation, so the

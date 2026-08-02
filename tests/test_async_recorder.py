@@ -15,6 +15,7 @@ it can't.
 
 import asyncio
 import importlib
+import json
 
 import pytest
 from conftest import TOOLS, fake_model, make_executor
@@ -132,18 +133,78 @@ def test_an_async_agent_with_sync_hooks_records(store, opening):
     assert store.steps_for(session["id"])
 
 
-def test_fork_refuses_an_async_agent_for_now(store, opening):
-    """Phase 1 records async agents but does not re-execute them. Forking one
-    must refuse loudly - calling it un-awaited would record nothing, silently."""
+# -- phase 2: re-execution drives async agents --------------------------------
+
+
+def test_fork_re_executes_an_async_agent(store, opening):
+    """fork drives an async agent via asyncio.run, from sync code."""
+    from retrial import fork
+
+    agent = record(store=store)(async_agent)
+    asyncio.run(agent(list(opening), TOOLS, async_model, make_async_executor(450)))
+    root = store.list_sessions()[0]["id"]
+    tool = next(s for s in store.steps_for(root) if s["step_type"] == "tool_call")
+
+    fork_id = fork(
+        from_sha=tool["sha"],
+        edit={
+            "op": "replace",
+            "path": "/output/0/content",
+            "value": json.dumps({"flight_price": 999}),
+        },
+        agent=agent,
+        store=store,
+        agent_args=(TOOLS, async_model, make_async_executor(999)),
+    )
+
+    forked = store.get_session(fork_id)
+    assert forked["parent_session_id"] == root
+    assert forked["status"] == "complete"
+    assert store.steps_for(fork_id), "the async fork recorded no steps"
+
+
+def test_fork_from_inside_a_running_loop_refuses(store, opening):
+    """asyncio.run cannot nest, so fork refuses when a loop is already running,
+    clearly and before it creates a fork session row."""
     from retrial import fork
     from retrial.errors import IntegrationError
 
     agent = record(store=store)(async_agent)
     asyncio.run(agent(list(opening), TOOLS, async_model, make_async_executor(450)))
-    sha = store.steps_for(store.list_sessions()[0]["id"])[0]["sha"]
+    root = store.list_sessions()[0]["id"]
+    tool = next(s for s in store.steps_for(root) if s["step_type"] == "tool_call")
 
-    with pytest.raises(IntegrationError, match="async"):
-        fork(from_sha=sha, agent=agent, store=store)
+    async def fork_from_within_a_loop():
+        return fork(
+            from_sha=tool["sha"],
+            agent=agent,
+            store=store,
+            agent_args=(TOOLS, async_model, make_async_executor(450)),
+        )
+
+    with pytest.raises(IntegrationError, match="running event loop"):
+        asyncio.run(fork_from_within_a_loop())
+
+    assert [s["id"] for s in store.list_sessions()] == [root], "a fork row leaked"
+
+
+def test_rerun_drives_async_agents(store, opening):
+    """The whole chain: rerun re-executes a recorded async run through fork's
+    asyncio.run boundary, from ordinary sync code."""
+    from retrial import rerun
+
+    agent = record(store=store)(async_agent)
+    asyncio.run(agent(list(opening), TOOLS, async_model, make_async_executor(450)))
+
+    result = rerun(
+        store,
+        "output contains 'Booked'",
+        agent=agent,
+        agent_args=(TOOLS, async_model, make_async_executor(450)),
+    )
+
+    assert result["model_calls"] > 0
+    assert not result["regressed"]  # same code and inputs, so nothing regressed
 
 
 # -- the load-bearing one: concurrent forks keep separate sessions ------------
