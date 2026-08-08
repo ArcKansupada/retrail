@@ -18,7 +18,12 @@ from .errors import (
 from .explore import ablate, sweep
 from .fork import fork
 from .patch import apply_patch
-from .pricing import cost_of, trajectory_cost
+from .pricing import FREE, cost_of, register_prices, trajectory_cost
+
+# Adapters make retrial work with any provider, and any local model behind an
+# OpenAI-compatible server. Importing this pulls in no SDK: each adapter
+# imports its own lazily, so the install stays one dependency wide.
+from .providers import ModelResponse, gemini_adapter, openai_adapter, tool_result, tool_uses
 from .record import record
 from .regress import rerun
 from .storage import Store
@@ -74,7 +79,15 @@ __all__ = [
     "rerun",
     "cost_of",
     "trajectory_cost",
+    "register_prices",
+    "FREE",
     "trajectory",
+    # providers
+    "ModelResponse",
+    "openai_adapter",
+    "gemini_adapter",
+    "tool_result",
+    "tool_uses",
     "export",
     "import_",
     "apply_patch",

@@ -10,6 +10,43 @@ existing key will not silently change meaning.
 
 ## [Unreleased]
 
+### Added
+- **retrial works with any model now, local ones included.** `retrial.providers`
+  adds adapters that translate a provider's wire format to and from retrial's
+  canonical trajectory shape, so `fork`, `diff`, `bisect`, `ablate`, `sweep`,
+  `rerun`, and `cost` are provider-indifferent without a single branch on who
+  was called - they only ever see canonical messages. `openai_adapter` takes a
+  `base_url`, which is all it takes to run a recorded agent against Ollama,
+  vLLM, llama.cpp, LM Studio, or OpenRouter; `gemini_adapter` covers
+  google-genai, synthesizing the tool-call id Gemini does not issue but a fork
+  splices on. Tools are declared once in canonical form and translated per
+  provider, so switching models never edits your tool list. The SDKs are
+  optional extras (`retrial[openai]`, `retrial[gemini]`) imported lazily inside
+  each adapter - a plain install still pulls in nothing but `click`. Writing an
+  adapter for anything else means returning a `ModelResponse` from `call_model`.
+  `examples/local_model_agent.py` is the booking agent run end to end against a
+  local model, with no key and no spend.
+- **Prices are extensible: `register_prices` and `FREE`.** The built-in table
+  cannot know about your fine-tune, your gateway's model names, or a model
+  newer than this release, and retrial still refuses to guess at any of them.
+  `register_prices({"my-finetune": (0.50, 1.50)})` fills the gap, and
+  `register_prices({"llama3.1": FREE})` says a model runs on your own hardware -
+  so a local run reports `$0.00000`, which is a fact, instead of `unpriced`,
+  which is merely the absence of one. An unregistered model is `unpriced` as
+  before.
+
+### Fixed
+- **A dated model snapshot now prices as its longest matching base model.**
+  `normalize()` took the first prefix match in table order, so with both
+  `gpt-5` and `gpt-5-mini` known, `gpt-5-mini-2026-01` could price at the
+  expensive model's rate. It could not bite while the table held only Claude
+  models, and it would have bitten immediately as soon as it didn't.
+- **Cached tokens are no longer billed twice through an adapter.** OpenAI's
+  `prompt_tokens` and Gemini's `promptTokenCount` include the cached prefix,
+  while retrial (following Anthropic) prices `input_tokens` and
+  `cache_read_input_tokens` separately. Both adapters subtract, so a cached
+  token is charged at the cache rate only.
+
 ## [0.1.4] - 2026-08-07
 
 ### Added

@@ -38,6 +38,36 @@ def run_agent(messages, tools=TOOLS, call_model=call_model, execute_tools=execut
 
 A bundled example under `examples/` forks, diffs, and bisects with no API key.
 
+## Any model, including local ones
+
+retrial never imports an LLM SDK — it intercepts the `call_model` you pass in, so it has no opinion about who you call. Adapters translate a provider's wire format to and from retrial's canonical shape, which is what keeps `fork`, `diff`, `bisect`, and `cost` working identically no matter what produced the run.
+
+```python
+from retrial import openai_adapter, gemini_adapter
+
+call_model = openai_adapter(model="gpt-5")
+call_model = gemini_adapter(model="gemini-2.5-pro")
+
+# ...or the same agent against a model on your own machine
+call_model = openai_adapter(
+    model="llama3.1",
+    base_url="http://localhost:11434/v1",   # ollama, vllm, llama.cpp, LM Studio
+    api_key="unused",
+)
+```
+
+That's the only line that changes. Your loop, your tools, and every command downstream stay exactly as they were — `examples/local_model_agent.py` is the booking agent run this way, end to end, with no key and no spend.
+
+SDKs are optional extras (`pip install 'retrial[openai]'`, `'retrial[gemini]'`), imported lazily by the adapter that needs one; a plain install still pulls in nothing but `click`. Writing an adapter for anything else — an internal gateway, a runtime that doesn't exist yet — means returning a `ModelResponse` from `call_model`.
+
+Cost is never guessed. An unrecognized model records as `unpriced` rather than as a plausible number; `register_prices` is how you fill that in, and `FREE` is how you say a model runs on your hardware:
+
+```python
+from retrial import register_prices, FREE
+
+register_prices({"llama3.1": FREE, "my-finetune": (0.50, 1.50)})
+```
+
 ## Example: fork, then diff
 
 Every step gets a content-hash SHA, addressable by a short prefix like git:
@@ -120,6 +150,8 @@ SHA prefix matching applies throughout. The store is found by searching upward f
 ```python
 from retrial import record, fork, diff, bisect, ablate, sweep, rerun, trajectory, Store
 from retrial import export, import_
+from retrial import openai_adapter, gemini_adapter, ModelResponse, tool_result, tool_uses
+from retrial import register_prices, FREE
 ```
 
 Every function returns a plain dict, so results stay JSON-shaped and printable. The shapes are declared in `retrial/types.py` and shipped with `py.typed`, so a typo in a key is a type error, not a `KeyError` at 3am.

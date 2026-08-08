@@ -194,3 +194,24 @@ def call_model(messages, tools):
 ```
 
 Everything above works identically. Note that fork and bisect then cost real tokens — bisect roughly `log2(steps)` re-executions, times `--samples`.
+
+## Going live on something other than Anthropic
+
+An adapter is the whole change — the loop, the tools, and every command above stay as they are:
+
+```python
+from retrial import openai_adapter, gemini_adapter
+
+call_model = openai_adapter(model="gpt-5")
+call_model = gemini_adapter(model="gemini-2.5-pro")
+```
+
+`local_model_agent.py` in this directory is this same booking agent pointed at a model on your own machine, which keeps fork and bisect free:
+
+```bash
+ollama serve && ollama pull llama3.1
+pip install 'retrial[openai]'
+python examples/local_model_agent.py
+```
+
+Any OpenAI-compatible server works the same way — vLLM, llama.cpp, LM Studio, OpenRouter — by changing `base_url`. Set `RETRIAL_LOCAL_MODEL` and `RETRIAL_LOCAL_BASE_URL` to redirect it without editing the file.

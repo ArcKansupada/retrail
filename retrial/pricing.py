@@ -6,6 +6,10 @@ act on it.
 
 Prices are USD per million tokens and they go stale. They are a lookup table,
 not a source of truth: check `retrial cost` against your actual bill.
+
+The table ships with the models this project can verify. For anything else -
+another provider, your own fine-tune, or a model on your own hardware -
+`register_prices` says what it costs and `FREE` says it costs nothing.
 """
 
 from __future__ import annotations
@@ -37,22 +41,70 @@ PRICES: dict[str, tuple[float, float]] = {
 CACHE_READ_MULTIPLIER = 0.1
 CACHE_WRITE_MULTIPLIER = 1.25
 
+#: For a model that costs nothing per token, such as one on your own hardware.
+#: Registering it says "this is free", which is a fact; leaving it unregistered
+#: says "nobody told me" - which is why an unknown model reads as `unpriced`.
+FREE: tuple[float, float] = (0.0, 0.0)
+
+#: Prefixes that route to a model rather than name it - LiteLLM, OpenRouter,
+#: Bedrock. The price belongs to the model, not to the road taken to reach it.
+_ROUTING_PREFIXES = (
+    "anthropic.",
+    "us.anthropic.",
+    "eu.anthropic.",
+    "anthropic/",
+    "openai/",
+    "google/",
+    "gemini/",
+    "models/",
+)
+
+
+def register_prices(prices: dict[str, tuple[float, float]]) -> None:
+    """Teach retrial what a model costs, in USD per million tokens.
+
+        register_prices({
+            "my-finetune": (0.50, 1.50),
+            "llama3.1:70b": FREE,          # runs on my machine
+        })
+
+    Call it before the run you want priced. Registered entries match exactly
+    like built-in ones, dated suffixes included, and override a built-in of
+    the same name - so a stale price is fixable without waiting for a release.
+    """
+    for name, price in prices.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"model name must be a non-empty string, got {name!r}")
+        if (
+            not isinstance(price, tuple)
+            or len(price) != 2
+            or not all(isinstance(p, (int, float)) and not isinstance(p, bool) for p in price)
+        ):
+            raise ValueError(
+                f"price for {name!r} must be a (input, output) tuple of numbers "
+                f"in USD per million tokens, got {price!r}"
+            )
+        if any(p < 0 for p in price):
+            raise ValueError(f"price for {name!r} cannot be negative, got {price!r}")
+        PRICES[name.strip()] = (float(price[0]), float(price[1]))
+
 
 def normalize(model: Any) -> str | None:
     """Strip provider prefixes and dated suffixes down to a table key."""
     if not isinstance(model, str):
         return None
     name = model.strip()
-    for prefix in ("anthropic.", "us.anthropic.", "eu.anthropic."):
+    for prefix in _ROUTING_PREFIXES:
         if name.startswith(prefix):
             name = name[len(prefix) :]
     if name in PRICES:
         return name
     # Dated snapshots (claude-haiku-4-5-20251001) price as their base model.
-    for key in PRICES:
-        if name.startswith(key):
-            return key
-    return None
+    # Longest match wins: with both "gpt-5" and "gpt-5-mini" in the table,
+    # "gpt-5-mini-2026-01" starts with both, and the shorter one would price
+    # a cheap model at the expensive one's rate.
+    matches = [key for key in PRICES if name.startswith(key)]
+    return max(matches, key=len) if matches else None
 
 
 def cost_of(serialized_response: Any) -> float | None:
