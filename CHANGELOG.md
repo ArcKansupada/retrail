@@ -10,6 +10,8 @@ existing key will not silently change meaning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
 ### Added
 - **retrial works with any model now, local ones included.** `retrial.providers`
   adds adapters that translate a provider's wire format to and from retrial's
