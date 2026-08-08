@@ -10,6 +10,8 @@ existing key will not silently change meaning.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-07
+
 ### Added
 - **Async agents are recorded, no longer refused.** `@record` now wraps an
   `async def` agent (and async `call_model` / `execute_tools`): the wrapper
